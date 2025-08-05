@@ -4,11 +4,13 @@ import CompetitionPage from "./pages/CompetitionPage/CompetitionPage";
 import { Toaster } from "sonner";
 import LoginPage from "./pages/LoginPage/LoginPage";
 import { AuthProvider } from "./context/AuthContext";
+import Navbar from "./components/main/Navbar";
 
 function App() {
   return (
     <AuthProvider>
       <Router>
+        <Navbar />
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route
