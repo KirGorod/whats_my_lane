@@ -11,8 +11,10 @@ import {
   doc,
 } from "firebase/firestore";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
 
 export default function CompetitionsPage() {
+  const { isAdmin } = useAuth();
   const [competitions, setCompetitions] = useState([]);
   const [open, setOpen] = useState(false);
 
@@ -48,7 +50,7 @@ export default function CompetitionsPage() {
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Competitions</h1>
-          <AddCompetition open={open} setOpen={setOpen} />
+          {isAdmin && <AddCompetition open={open} setOpen={setOpen} />}
         </div>
 
         {competitions.length > 0 ? (
@@ -67,12 +69,14 @@ export default function CompetitionsPage() {
                   </Link>
                   <p className="text-sm text-gray-500">Lanes: {comp.lanes}</p>
                 </div>
-                <button
-                  className="text-red-500 hover:text-red-700"
-                  onClick={() => removeCompetition(comp.id)}
-                >
-                  Remove
-                </button>
+                {isAdmin && (
+                  <button
+                    className="text-red-500 hover:text-red-700"
+                    onClick={() => removeCompetition(comp.id)}
+                  >
+                    Remove
+                  </button>
+                )}
               </li>
             ))}
           </ul>

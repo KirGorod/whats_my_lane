@@ -3,6 +3,7 @@ import { Button } from "../../../components/ui/button";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../firebase";
 import Lane from "./Lane";
+import { useAuth } from "../../../context/AuthContext";
 
 interface Lane {
   id: number;
@@ -26,6 +27,8 @@ const Lanes = ({
   clearAllLanes,
   competitionId,
 }: Props) => {
+  const { isAdmin } = useAuth();
+
   const addLane = async () => {
     try {
       const existingIds = lanes.map((l) => l.id).sort((a, b) => a - b);
@@ -54,17 +57,19 @@ const Lanes = ({
     <div className="w-1/2 bg-white rounded-lg shadow p-4 flex flex-col">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-bold">Lanes</h2>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={autoFillLanes}>
-            Auto Fill
-          </Button>
-          <Button variant="secondary" onClick={addLane}>
-            + Lane
-          </Button>
-          <Button variant="destructive" onClick={clearAllLanes}>
-            Clear All
-          </Button>
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={autoFillLanes}>
+              Auto Fill
+            </Button>
+            <Button variant="secondary" onClick={addLane}>
+              + Lane
+            </Button>
+            <Button variant="destructive" onClick={clearAllLanes}>
+              Clear All
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-4 flex-grow">

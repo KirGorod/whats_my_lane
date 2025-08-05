@@ -1,7 +1,10 @@
+import { useAuth } from "../../../context/AuthContext";
+
 const DoneCompetitorsList = ({
   doneCompetitors,
   returnDoneCompetitorToLane,
 }) => {
+  const { isAdmin } = useAuth();
   return (
     <div className="w-1/4 bg-white rounded-lg shadow p-4 flex flex-col">
       <h2 className="text-lg font-bold mb-4">Done</h2>
@@ -14,12 +17,14 @@ const DoneCompetitorsList = ({
             <span>
               {competitor.name} ({competitor.category})
             </span>
-            <button
-              onClick={() => returnDoneCompetitorToLane(competitor)}
-              className="text-xs text-green-500 hover:underline"
-            >
-              Return
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => returnDoneCompetitorToLane(competitor)}
+                className="text-xs text-green-500 hover:underline"
+              >
+                Return
+              </button>
+            )}
           </li>
         ))}
       </ul>
