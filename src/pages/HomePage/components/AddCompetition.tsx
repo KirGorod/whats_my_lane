@@ -1,6 +1,12 @@
 import { Label } from "@radix-ui/react-label";
 import { Button } from "../../../components/ui/button";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  doc,
+  writeBatch,
+} from "firebase/firestore";
 import { db } from "../../../firebase";
 import {
   Dialog,
@@ -27,11 +33,26 @@ const AddCompetition = ({ open, setOpen }) => {
     try {
       setOpen(false);
 
-      await addDoc(collection(db, "competitions"), {
+      const compRef = await addDoc(collection(db, "competitions"), {
         name: name.trim(),
-        lanes,
+        lanes, // store number of lanes too
         createdAt: serverTimestamp(),
       });
+
+      const batch = writeBatch(db);
+      const lanesRef = collection(db, "competitions", compRef.id, "lanes");
+
+      for (let i = 1; i <= Number(lanes); i++) {
+        const laneDoc = doc(lanesRef); // auto-ID
+        batch.set(laneDoc, {
+          id: i,
+          category: null, // or default category
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
+
       toast.success("Competition added!");
       setName("");
       setLanes(1);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { Competitor } from "../../types/competitor";
 import { Category } from "../../types/category";
 import CompetitorsList from "./components/CompetitorsList";
@@ -18,6 +18,7 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
+import LanesConfig from "./components/LanesConfig";
 
 interface Lane {
   id: number;
@@ -30,12 +31,7 @@ export default function CompetitionPage() {
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
-  const [lanes, setLanes] = useState<Lane[]>([
-    { id: 1, category: Category.H, competitor: null },
-    { id: 2, category: Category.H, competitor: null },
-    { id: 3, category: Category.R, competitor: null },
-    { id: 4, category: Category.N, competitor: null },
-  ]);
+  const [lanes, setLanes] = useState<Lane[]>([]);
 
   // 🔹 Don't do anything until we have a competitionId
   useEffect(() => {
@@ -63,28 +59,48 @@ export default function CompetitionPage() {
       );
     });
 
-    const laneQuery = query(
-      collection(db, "competitions", competitionId, "competitors"),
-      where("status", "==", "lane")
+    const lanesRef = collection(db, "competitions", competitionId, "lanes");
+    const lanesQuery = query(
+      collection(db, "competitions", competitionId, "lanes"),
+      orderBy("id", "asc")
     );
-    const unsubLanes = onSnapshot(laneQuery, (snap) => {
-      const laneAssignments = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as Competitor)
+
+    const unsubLanesConfig = onSnapshot(lanesQuery, (lanesSnap) => {
+      const lanesFromDb = lanesSnap.docs.map((docSnap) => ({
+        id: docSnap.data().id,
+        category: docSnap.data().category,
+        competitor: null,
+        laneDocId: docSnap.id,
+      }));
+
+      // 🔹 Listen to competitors in lanes
+      const laneQueryRef = query(
+        collection(db, "competitions", competitionId, "competitors"),
+        where("status", "==", "lane")
       );
-      setLanes((prev) =>
-        prev.map((lane) => {
-          const match = laneAssignments.find(
-            (c) => c.lane === lane.id && c.category === lane.category
-          );
-          return { ...lane, competitor: match || null };
-        })
-      );
+      const unsubLaneAssignments = onSnapshot(laneQueryRef, (compSnap) => {
+        const laneAssignments = compSnap.docs.map(
+          (d) => ({ id: d.id, ...d.data() } as Competitor)
+        );
+
+        // Merge lane config with lane assignments
+        setLanes(
+          lanesFromDb.map((lane) => {
+            const match = laneAssignments.find(
+              (c) => c.lane === lane.id && c.category === lane.category
+            );
+            return { ...lane, competitor: match || null };
+          })
+        );
+      });
+
+      return () => unsubLaneAssignments();
     });
 
     return () => {
       unsubWaiting();
       unsubDone();
-      unsubLanes();
+      unsubLanesConfig();
     };
   }, [competitionId]);
 
@@ -289,6 +305,7 @@ export default function CompetitionPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      <Link to="/">Home</Link>
       <div className="flex gap-4 h-full">
         <CompetitorsList
           competitionId={competitionId}
@@ -299,6 +316,7 @@ export default function CompetitionPage() {
         />
 
         <Lanes
+          competitionId={competitionId}
           lanes={lanes}
           autoFillLanes={autoFillLanes}
           clearLane={clearLane}
