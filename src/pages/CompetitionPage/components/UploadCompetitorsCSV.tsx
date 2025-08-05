@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import Papa from "papaparse";
 import {
@@ -13,50 +11,70 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { db } from "@/firebase";
+import {
+  collection,
+  doc,
+  serverTimestamp,
+  writeBatch,
+} from "firebase/firestore";
 
-interface UploadCompetitorsCSVProps {
-  addCompetitor: (competitor: {
-    id: number;
-    name: string;
-    category: string;
-  }) => void;
-}
-
-export default function UploadCompetitorsCSV({
-  addCompetitor,
-}: UploadCompetitorsCSVProps) {
+export default function UploadCompetitorsCSV({ competitionId }) {
   const [open, setOpen] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!competitionId) {
+      toast.error("Invalid competition ID");
+      return;
+    }
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         const parsedData = results.data as {
-          id: number;
           name?: string;
           category?: string;
         }[];
 
+        const batch = writeBatch(db);
+        const competitorsRef = collection(
+          db,
+          "competitions",
+          competitionId,
+          "competitors"
+        );
+
         let addedCount = 0;
-        parsedData.forEach((row) => {
+
+        for (const row of parsedData) {
           if (row.name && row.category) {
-            addCompetitor({
-              id: row.id,
+            const newDocRef = doc(competitorsRef); // generates ID now
+            batch.set(newDocRef, {
               name: row.name.trim(),
               category: row.category.trim(),
+              lane: null,
+              status: "waiting",
+              order: Date.now(),
+              createdAt: serverTimestamp(),
             });
             addedCount++;
           }
-        });
+        }
 
-        toast.success(`CSV Uploaded`, {
-          description: `Successfully added ${addedCount} competitors.`,
-        });
-        setOpen(false);
+        try {
+          await batch.commit();
+          toast.success(`CSV Uploaded`, {
+            description: `Successfully added ${addedCount} competitors.`,
+          });
+          setOpen(false);
+        } catch (err) {
+          console.error("Error adding competitors:", err);
+          toast.error("Error uploading CSV");
+        }
       },
       error: (error) => {
         toast.error(`Error parsing CSV`, {

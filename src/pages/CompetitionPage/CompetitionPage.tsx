@@ -1,10 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import type { Competitor } from "../../types/competitor";
 import { Category } from "../../types/category";
 import CompetitorsList from "./components/CompetitorsList";
 import Lanes from "./components/Lanes";
 import DoneCompetitorsList from "./components/DoneCompetitorsList";
 import { toast } from "sonner";
+import { db } from "../../firebase";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp,
+} from "firebase/firestore";
 
 interface Lane {
   id: number;
@@ -13,12 +26,10 @@ interface Lane {
 }
 
 export default function CompetitionPage() {
-  const dummyCompetitors: Competitor[] = [];
+  const { competitionId } = useParams<{ competitionId: string }>();
 
-  const [competitors, setCompetitors] =
-    useState<Competitor[]>(dummyCompetitors);
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
-
   const [lanes, setLanes] = useState<Lane[]>([
     { id: 1, category: Category.H, competitor: null },
     { id: 2, category: Category.H, competitor: null },
@@ -26,19 +37,106 @@ export default function CompetitionPage() {
     { id: 4, category: Category.N, competitor: null },
   ]);
 
-  const addCompetitor = (competitor: Competitor) => {
-    setCompetitors((prev) => [...prev, competitor]);
+  // 🔹 Don't do anything until we have a competitionId
+  useEffect(() => {
+    if (!competitionId) return;
+
+    const waitingQuery = query(
+      collection(db, "competitions", competitionId, "competitors"),
+      where("status", "==", "waiting"),
+      orderBy("order", "asc")
+    );
+    const unsubWaiting = onSnapshot(waitingQuery, (snap) => {
+      setCompetitors(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Competitor))
+      );
+    });
+
+    const doneQuery = query(
+      collection(db, "competitions", competitionId, "competitors"),
+      where("status", "==", "done"),
+      orderBy("order", "desc")
+    );
+    const unsubDone = onSnapshot(doneQuery, (snap) => {
+      setDoneCompetitors(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Competitor))
+      );
+    });
+
+    const laneQuery = query(
+      collection(db, "competitions", competitionId, "competitors"),
+      where("status", "==", "lane")
+    );
+    const unsubLanes = onSnapshot(laneQuery, (snap) => {
+      const laneAssignments = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as Competitor)
+      );
+      setLanes((prev) =>
+        prev.map((lane) => {
+          const match = laneAssignments.find(
+            (c) => c.lane === lane.id && c.category === lane.category
+          );
+          return { ...lane, competitor: match || null };
+        })
+      );
+    });
+
+    return () => {
+      unsubWaiting();
+      unsubDone();
+      unsubLanes();
+    };
+  }, [competitionId]);
+
+  const addCompetitor = async (competitor: Omit<Competitor, "id">) => {
+    if (!competitionId) return;
+    try {
+      await addDoc(
+        collection(db, "competitions", competitionId, "competitors"),
+        {
+          ...competitor,
+          lane: null,
+          status: "waiting",
+          order: Date.now(),
+          createdAt: serverTimestamp(),
+        }
+      );
+      toast.success("Competitor added");
+    } catch (err) {
+      console.error(err);
+      toast.error("Error adding competitor");
+    }
   };
 
-  const removeCompetitor = (index: number) => {
+  const removeCompetitor = async (index: number) => {
+    if (!competitionId) return;
     const competitorToMove = competitors[index];
-    setCompetitors((prev) => prev.filter((_, i) => i !== index));
-    setDoneCompetitors((prev) => [...prev, competitorToMove]);
+    if (!competitorToMove) return;
+    try {
+      await updateDoc(
+        doc(
+          db,
+          "competitions",
+          competitionId,
+          "competitors",
+          competitorToMove.id
+        ),
+        {
+          lane: null,
+          status: "done",
+          order: Date.now(),
+        }
+      );
+      toast.success("Marked as done");
+    } catch (err) {
+      console.error(err);
+      toast.error("Error updating competitor");
+    }
   };
 
-  const autoFillLanes = () => {
+  const autoFillLanes = async () => {
+    if (!competitionId) return;
     const emptyLanes = lanes.filter((lane) => !lane.competitor);
-
     if (emptyLanes.length === 0) {
       toast.error("All lanes are already occupied");
       return;
@@ -47,24 +145,24 @@ export default function CompetitionPage() {
     let availableCompetitors = [...competitors];
     let unfilledCount = 0;
 
-    const updatedLanes = lanes.map((lane) => {
-      if (!lane.competitor) {
-        const matchIndex = availableCompetitors.findIndex(
-          (c) => c.category === lane.category
+    for (const lane of emptyLanes) {
+      const matchIndex = availableCompetitors.findIndex(
+        (c) => c.category === lane.category
+      );
+      if (matchIndex !== -1) {
+        const matched = availableCompetitors[matchIndex];
+        availableCompetitors.splice(matchIndex, 1);
+        await updateDoc(
+          doc(db, "competitions", competitionId, "competitors", matched.id),
+          {
+            lane: lane.id,
+            status: "lane",
+          }
         );
-        if (matchIndex !== -1) {
-          const matched = availableCompetitors[matchIndex];
-          availableCompetitors.splice(matchIndex, 1);
-          return { ...lane, competitor: matched };
-        } else {
-          unfilledCount++;
-        }
+      } else {
+        unfilledCount++;
       }
-      return lane;
-    });
-
-    setLanes(updatedLanes);
-    setCompetitors(availableCompetitors);
+    }
 
     if (unfilledCount > 0) {
       toast.warning(`${unfilledCount} lane(s) were not filled`);
@@ -73,97 +171,127 @@ export default function CompetitionPage() {
     }
   };
 
-  const clearLane = (laneId: number) => {
-    setLanes((prev) => {
-      const updated = prev.map((lane) => {
-        if (lane.id === laneId && lane.competitor) {
-          setDoneCompetitors((done) => {
-            if (!done.find((d) => d.id === lane.competitor!.id)) {
-              return [...done, lane.competitor!];
-            }
-            return done;
-          });
-          return { ...lane, competitor: null };
+  const clearLane = async (laneId: number) => {
+    if (!competitionId) return;
+    const lane = lanes.find((l) => l.id === laneId);
+    if (!lane?.competitor) return;
+
+    try {
+      await updateDoc(
+        doc(
+          db,
+          "competitions",
+          competitionId,
+          "competitors",
+          lane.competitor.id
+        ),
+        {
+          lane: null,
+          status: "done",
+          order: Date.now(),
         }
-        return lane;
-      });
-      return updated;
-    });
-    toast.success(`Lane ${laneId} cleared`);
+      );
+      toast.success(`Lane ${laneId} cleared`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error clearing lane");
+    }
   };
 
-  const clearAllLanes = () => {
-    const competitorsToMove = lanes
-      .filter((lane) => lane.competitor)
-      .map((lane) => lane.competitor!);
-
-    if (competitorsToMove.length === 0) {
+  const clearAllLanes = async () => {
+    if (!competitionId) return;
+    const laneCompetitors = lanes.filter((l) => l.competitor);
+    if (laneCompetitors.length === 0) {
       toast.error("No lanes to clear");
       return;
     }
 
-    setDoneCompetitors((done) => {
-      const uniqueToAdd = competitorsToMove.filter(
-        (c) => !done.find((d) => d.id === c.id)
+    try {
+      for (const lane of laneCompetitors) {
+        if (lane.competitor) {
+          await updateDoc(
+            doc(
+              db,
+              "competitions",
+              competitionId,
+              "competitors",
+              lane.competitor.id
+            ),
+            {
+              lane: null,
+              status: "done",
+              order: Date.now(),
+            }
+          );
+        }
+      }
+      toast.success(`Cleared ${laneCompetitors.length} lane(s)`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error clearing lanes");
+    }
+  };
+
+  const fillLaneWithCompetitor = async (competitor: Competitor) => {
+    if (!competitionId) return;
+    const laneIndex = lanes.findIndex(
+      (lane) =>
+        lane.category === competitor.category && lane.competitor === null
+    );
+    if (laneIndex === -1) {
+      toast.error(`No empty lane for category ${competitor.category}`);
+      return;
+    }
+    try {
+      await updateDoc(
+        doc(db, "competitions", competitionId, "competitors", competitor.id),
+        {
+          lane: lanes[laneIndex].id,
+          status: "lane",
+        }
       );
-      return [...done, ...uniqueToAdd];
-    });
-
-    setLanes((prev) => prev.map((lane) => ({ ...lane, competitor: null })));
-
-    toast.success(`Cleared ${competitorsToMove.length} lane(s)`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error filling lane");
+    }
   };
 
-  const fillLaneWithCompetitor = (competitor: Competitor) => {
+  const returnDoneCompetitorToLane = async (competitor: Competitor) => {
+    if (!competitionId) return;
     const laneIndex = lanes.findIndex(
       (lane) =>
         lane.category === competitor.category && lane.competitor === null
     );
-
     if (laneIndex === -1) {
       toast.error(`No empty lane for category ${competitor.category}`);
       return;
     }
-
-    // Update lanes only if we have a free lane
-    setLanes((prevLanes) => {
-      const updatedLanes = [...prevLanes];
-      updatedLanes[laneIndex] = { ...updatedLanes[laneIndex], competitor };
-      return updatedLanes;
-    });
-
-    // Remove from competitors list
-    setCompetitors((prev) => prev.filter((c) => c.id !== competitor.id));
-  };
-
-  const returnDoneCompetitorToLane = (competitor: Competitor) => {
-    const laneIndex = lanes.findIndex(
-      (lane) =>
-        lane.category === competitor.category && lane.competitor === null
-    );
-
-    if (laneIndex === -1) {
-      toast.error(`No empty lane for category ${competitor.category}`);
-      return;
+    try {
+      await updateDoc(
+        doc(db, "competitions", competitionId, "competitors", competitor.id),
+        {
+          lane: lanes[laneIndex].id,
+          status: "lane",
+        }
+      );
+      toast.success(
+        `${competitor.name} returned to lane ${lanes[laneIndex].id}`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Error returning competitor");
     }
-
-    // Assign to lane
-    setLanes((prev) => {
-      const updated = [...prev];
-      updated[laneIndex] = { ...updated[laneIndex], competitor };
-      return updated;
-    });
-
-    // Remove from done list
-    setDoneCompetitors((prev) => prev.filter((c) => c.id !== competitor.id));
-
-    toast.success(`${competitor.name} returned to lane ${laneIndex + 1}`);
   };
+
+  if (!competitionId) {
+    return <p className="p-6 text-gray-500">Invalid competition</p>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="flex gap-4 h-full">
         <CompetitorsList
+          competitionId={competitionId}
           competitors={competitors}
           removeCompetitor={removeCompetitor}
           addCompetitor={addCompetitor}

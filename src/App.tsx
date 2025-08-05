@@ -18,7 +18,10 @@ function App() {
               </Button>
             }
           />
-          <Route path="/competitions/:id" element={<CompetitionPage />} />
+          <Route
+            path="/competitions/:competitionId"
+            element={<CompetitionPage />}
+          />{" "}
         </Routes>
       </Router>
       <Toaster position="bottom-right" richColors />

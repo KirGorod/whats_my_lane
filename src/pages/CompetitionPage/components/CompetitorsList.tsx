@@ -3,6 +3,7 @@ import AddCompetitorDialog from "./AddCompetitorDialog";
 import UploadCompetitorsCSV from "./UploadCompetitorsCSV";
 
 const CompetitorsList = ({
+  competitionId,
   competitors,
   removeCompetitor,
   addCompetitor,
@@ -39,7 +40,7 @@ const CompetitorsList = ({
       </ul>
       <AddCompetitorDialog addCompetitor={addCompetitor} />
 
-      <UploadCompetitorsCSV addCompetitor={addCompetitor} />
+      <UploadCompetitorsCSV competitionId={competitionId} />
     </div>
   );
 };
