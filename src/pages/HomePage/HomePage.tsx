@@ -1,40 +1,46 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import AddCompetition from "./components/AddCompetition";
+import { db } from "../../firebase";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "../../components/ui/dialog";
-import { Button } from "../../components/ui/button";
-import { Label } from "../../components/ui/label";
-import { Input } from "../../components/ui/input";
+  collection,
+  onSnapshot,
+  orderBy,
+  deleteDoc,
+  query,
+  doc,
+} from "firebase/firestore";
+import { toast } from "sonner";
 
 export default function CompetitionsPage() {
-  const [competitions, setCompetitions] = useState([
-    { id: 1, name: "Summer Championship", lanes: 6 },
-    { id: 2, name: "Winter Cup", lanes: 8 },
-  ]);
-
-  const [name, setName] = useState("");
-  const [lanes, setLanes] = useState(3);
+  const [competitions, setCompetitions] = useState([]);
   const [open, setOpen] = useState(false);
 
-  const addCompetition = (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
+  useEffect(() => {
+    const competitionsQuery = query(
+      collection(db, "competitions"),
+      orderBy("createdAt", "desc")
+    );
 
-    setCompetitions((prev) => [
-      ...prev,
-      { id: Date.now(), name: name.trim(), lanes: parseInt(lanes, 10) },
-    ]);
+    const unsubscribe = onSnapshot(competitionsQuery, (snapshot) => {
+      const comps = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setCompetitions(comps);
+    });
 
-    setName("");
-    setLanes(1);
-    setOpen(false);
+    return () => unsubscribe();
+  }, []);
+
+  const removeCompetition = async (id) => {
+    try {
+      await deleteDoc(doc(db, "competitions", id));
+      toast.success("Competition removed");
+    } catch (err) {
+      console.error(err);
+      toast.error("Error removing competition");
+    }
   };
 
   return (
@@ -42,52 +48,7 @@ export default function CompetitionsPage() {
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Competitions</h1>
-
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">Add competition</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <form onSubmit={addCompetition}>
-                <DialogHeader>
-                  <DialogTitle>Add competition</DialogTitle>
-                </DialogHeader>
-
-                <div className="grid gap-4">
-                  <div className="grid gap-3">
-                    <Label htmlFor="competition-name">Competition Name</Label>
-                    <Input
-                      id="competition-name"
-                      type="text"
-                      placeholder="Competition Name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid gap-3">
-                    <Label htmlFor="lanes">Number of Lanes</Label>
-                    <Input
-                      id="lanes"
-                      type="number"
-                      placeholder="Lanes"
-                      value={lanes}
-                      onChange={(e) => setLanes(e.target.value)}
-                      min={1}
-                    />
-                  </div>
-                </div>
-
-                <DialogFooter className="mt-4">
-                  <DialogClose asChild>
-                    <Button variant="outline" type="button">
-                      Cancel
-                    </Button>
-                  </DialogClose>
-                  <Button type="submit">Add</Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <AddCompetition open={open} setOpen={setOpen} />
         </div>
 
         {competitions.length > 0 ? (
@@ -108,11 +69,7 @@ export default function CompetitionsPage() {
                 </div>
                 <button
                   className="text-red-500 hover:text-red-700"
-                  onClick={() =>
-                    setCompetitions((prev) =>
-                      prev.filter((c) => c.id !== comp.id)
-                    )
-                  }
+                  onClick={() => removeCompetition(comp.id)}
                 >
                   Remove
                 </button>
