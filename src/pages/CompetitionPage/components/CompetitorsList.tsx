@@ -1,5 +1,6 @@
 import type { Competitor } from "../../../types/competitor";
 import AddCompetitorDialog from "./AddCompetitorDialog";
+import UploadCompetitorsCSV from "./UploadCompetitorsCSV";
 
 const CompetitorsList = ({
   competitors,
@@ -37,6 +38,8 @@ const CompetitorsList = ({
         ))}
       </ul>
       <AddCompetitorDialog addCompetitor={addCompetitor} />
+
+      <UploadCompetitorsCSV addCompetitor={addCompetitor} />
     </div>
   );
 };

@@ -13,14 +13,7 @@ interface Lane {
 }
 
 export default function CompetitionPage() {
-  const dummyCompetitors: Competitor[] = [
-    { id: 1, name: "Alice Johnson", category: Category.H },
-    { id: 2, name: "Bob Smith", category: Category.H },
-    { id: 3, name: "Charlie Brown", category: Category.R },
-    { id: 4, name: "Diana Prince", category: Category.R },
-    { id: 5, name: "Ethan Hunt", category: Category.N },
-    { id: 6, name: "Fiona Gallagher", category: Category.N },
-  ];
+  const dummyCompetitors: Competitor[] = [];
 
   const [competitors, setCompetitors] =
     useState<Competitor[]>(dummyCompetitors);
