@@ -1,22 +1,8 @@
 import type { Competitor } from "../../../types/competitor";
 import { Button } from "../../../components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/ui/select";
-import { Category } from "../../../types/category";
-import {
-  doc,
-  updateDoc,
-  collection,
-  addDoc,
-  deleteDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../firebase";
+import Lane from "./Lane";
 
 interface Lane {
   id: number;
@@ -40,22 +26,6 @@ const Lanes = ({
   clearAllLanes,
   competitionId,
 }: Props) => {
-  // 🔹 Change lane category in Firestore
-  const handleCategoryChange = async (
-    laneDocId: string,
-    newCategory: string
-  ) => {
-    try {
-      await updateDoc(
-        doc(db, "competitions", competitionId, "lanes", laneDocId),
-        { category: newCategory }
-      );
-    } catch (err) {
-      console.error("Error updating category", err);
-    }
-  };
-
-  // 🔹 Add a new lane with next available ID
   const addLane = async () => {
     try {
       const existingIds = lanes.map((l) => l.id).sort((a, b) => a - b);
@@ -80,20 +50,8 @@ const Lanes = ({
     }
   };
 
-  // 🔹 Remove a lane by its Firestore doc ID
-  const removeLane = async (laneDocId: string) => {
-    try {
-      await deleteDoc(
-        doc(db, "competitions", competitionId, "lanes", laneDocId)
-      );
-    } catch (err) {
-      console.error("Error removing lane", err);
-    }
-  };
-
   return (
     <div className="w-1/2 bg-white rounded-lg shadow p-4 flex flex-col">
-      {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-bold">Lanes</h2>
         <div className="flex gap-2">
@@ -109,62 +67,13 @@ const Lanes = ({
         </div>
       </div>
 
-      {/* Lanes grid */}
-      <div className="grid grid-cols-2 gap-4 flex-grow">
+      <div className="grid grid-cols-3 gap-4 flex-grow">
         {lanes.map((lane) => (
-          <div
-            key={lane.id}
-            className="border rounded-lg p-4 flex flex-col items-center justify-center"
-          >
-            {/* Lane title + remove button */}
-            <p className="font-semibold mb-2">
-              Lane {lane.id}{" "}
-              <button
-                className="text-xs text-red-500 hover:underline ml-2"
-                onClick={() => lane.laneDocId && removeLane(lane.laneDocId)}
-              >
-                Remove
-              </button>
-            </p>
-
-            {/* Editable category dropdown */}
-            <Select
-              value={lane.category || ""}
-              onValueChange={(value) =>
-                lane.laneDocId && handleCategoryChange(lane.laneDocId, value)
-              }
-            >
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.values(Category).map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Competitor in lane or Empty */}
-            {lane.competitor ? (
-              <>
-                <p className="text-sm text-gray-500 mt-2">
-                  {lane.competitor.name}
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => clearLane(lane.id)}
-                  className="mt-2"
-                >
-                  Clear
-                </Button>
-              </>
-            ) : (
-              <p className="text-sm text-gray-400 mt-2">Empty</p>
-            )}
-          </div>
+          <Lane
+            lane={lane}
+            competitionId={competitionId}
+            clearLane={clearLane}
+          />
         ))}
       </div>
     </div>
