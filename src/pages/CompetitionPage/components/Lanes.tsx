@@ -134,11 +134,11 @@ const Lanes = ({
       </div>
 
       {/* Lanes */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 [column-count:1] sm:[column-count:2] lg:[column-count:3] [column-gap:0.75rem]">
         {lanes.map((lane) => (
           <div
             key={lane.id}
-            className={`border rounded-lg p-3 lg:p-4 transition-colors ${
+            className={`mb-3 break-inside-avoid border rounded-lg p-3 lg:p-4 transition-colors ${
               lane.competitor
                 ? "border-blue-200 bg-blue-50"
                 : "border-gray-200 bg-white hover:bg-gray-50"

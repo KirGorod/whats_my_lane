@@ -317,7 +317,7 @@ export default function CompetitionPage() {
 
       {/* Desktop Layout - 3 Columns */}
       <div className="hidden lg:flex">
-        <div className="w-1/3 border-r border-gray-200 bg-white">
+        <div className="w-1/4 border-r border-gray-200 bg-white">
           <CompetitorsList
             competitionId={competitionId}
             competitors={competitors}
@@ -327,7 +327,7 @@ export default function CompetitionPage() {
           />
         </div>
 
-        <div className="w-1/3 border-r border-gray-200 bg-white">
+        <div className="w-1/2 border-r border-gray-200 bg-white">
           <Lanes
             competitionId={competitionId}
             lanes={lanes}
@@ -337,7 +337,7 @@ export default function CompetitionPage() {
           />
         </div>
 
-        <div className="w-1/3 bg-white">
+        <div className="w-1/4 bg-white">
           <DoneCompetitorsList
             doneCompetitors={doneCompetitors}
             returnDoneCompetitorToLane={returnDoneCompetitorToLane}
