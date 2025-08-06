@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { Category } from "../../../types/category";
+import Lane from "./Lane";
 
 interface Competitor {
   id: string;
@@ -49,23 +50,8 @@ const Lanes = ({
   removeCompetitorFromLane,
 }: Props) => {
   const { isAdmin } = useAuth();
-  const categories = Object.values(Category);
 
   const occupiedLanes = lanes.filter((l) => l.competitor).length;
-
-  const getBadgeVariant = (category: string | null) => {
-    if (!category) return "outline";
-    switch (category) {
-      case "H":
-        return "default";
-      case "R":
-        return "secondary";
-      case "N":
-        return "outline";
-      default:
-        return "default";
-    }
-  };
 
   const addLane = async () => {
     try {
@@ -134,73 +120,17 @@ const Lanes = ({
       </div>
 
       {/* Lanes */}
-      <div className="flex-1 overflow-y-auto p-4 [column-count:1] sm:[column-count:2] lg:[column-count:3] [column-gap:0.75rem]">
+      <div
+        className="flex-1 overflow-y-auto p-4 
+  grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+      >
         {lanes.map((lane) => (
-          <div
+          <Lane
             key={lane.id}
-            className={`mb-3 break-inside-avoid border rounded-lg p-3 lg:p-4 transition-colors ${
-              lane.competitor
-                ? "border-blue-200 bg-blue-50"
-                : "border-gray-200 bg-white hover:bg-gray-50"
-            }`}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-lg">Lane {lane.id}</span>
-                <Badge variant={getBadgeVariant(lane.category)}>
-                  {lane.category || "—"}
-                </Badge>
-              </div>
-
-              {isAdmin && (
-                <Select
-                  value={lane.category || ""}
-                  onValueChange={(value) => updateLaneCategory(lane.id, value)}
-                >
-                  <SelectTrigger className="w-24 h-8">
-                    <SelectValue placeholder="Cat" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            {lane.competitor ? (
-              <div className="space-y-3">
-                <div className="font-medium text-gray-900">
-                  {lane.competitor.name}
-                </div>
-
-                {isAdmin && (
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => moveToDone(lane.id)}
-                      size="sm"
-                      className="flex-1"
-                    >
-                      <Flag className="w-4 h-4 mr-1" />
-                      Done
-                    </Button>
-                    <Button
-                      onClick={() => removeCompetitorFromLane(lane.id)}
-                      size="sm"
-                      variant="outline"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-gray-500 text-center py-4">Empty lane</div>
-            )}
-          </div>
+            lane={lane}
+            competitionId={competitionId}
+            clearLane={clearLane}
+          />
         ))}
       </div>
     </div>

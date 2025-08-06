@@ -9,11 +9,12 @@ import {
 } from "../../../components/ui/select";
 import { Category } from "../../../types/category";
 import { db } from "../../../firebase";
-import { Trash2 } from "lucide-react";
+import { Badge, Flag, Trash2 } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 
 const Lane = ({ lane, competitionId, clearLane }) => {
   const { isAdmin } = useAuth();
+  const categories = Object.values(Category);
   const removeLane = async (laneDocId: string) => {
     try {
       await deleteDoc(
@@ -23,10 +24,8 @@ const Lane = ({ lane, competitionId, clearLane }) => {
       console.error("Error removing lane", err);
     }
   };
-  const handleCategoryChange = async (
-    laneDocId: string,
-    newCategory: string
-  ) => {
+  const updateLaneCategory = async (laneDocId: string, newCategory: string) => {
+    console.log(laneDocId, newCategory);
     try {
       await updateDoc(
         doc(db, "competitions", competitionId, "lanes", laneDocId),
@@ -37,64 +36,85 @@ const Lane = ({ lane, competitionId, clearLane }) => {
     }
   };
 
+  const getBadgeVariant = (category: string | null) => {
+    if (!category) return "outline";
+    switch (category) {
+      case "H":
+        return "default";
+      case "R":
+        return "secondary";
+      case "N":
+        return "outline";
+      default:
+        return "default";
+    }
+  };
+
   return (
     <div
-      key={lane.id}
-      className="relative border rounded-lg p-4 flex flex-col justify-between items-center min-h-[200px] max-h-2"
+      className={`mb-3 break-inside-avoid border rounded-lg p-3 lg:p-4 transition-colors ${
+        lane.competitor
+          ? "border-blue-200 bg-blue-50"
+          : "border-gray-200 bg-white hover:bg-gray-50"
+      }`}
     >
-      {/* Bin icon in top-right */}
-      {isAdmin && (
-        <button
-          className="absolute top-2 right-2 text-red-500 hover:text-red-700"
-          onClick={() => lane.laneDocId && removeLane(lane.laneDocId)}
-        >
-          <Trash2 size={18} />
-        </button>
-      )}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-lg">Lane {lane.id}</span>
+          <Badge variant={getBadgeVariant(lane.category)}>
+            {lane.category || "—"}
+          </Badge>
+        </div>
 
-      {/* Lane title */}
-      <p className="font-semibold mb-2 text-2xl">Lane {lane.id}</p>
-
-      {/* Competitor info */}
-      {lane.competitor ? (
-        <p className="text-2xl text-teal-500 mt-2 text-center">
-          {lane.competitor.name}
-        </p>
-      ) : (
-        <p className="text-sm text-gray-400 mt-2">Empty</p>
-      )}
-
-      {/* Bottom row: Category + Clear */}
-      {isAdmin && (
-        <div className="flex items-center justify-between w-full mt-4">
+        {isAdmin && (
           <Select
-            value={lane.category || ""}
+            value={lane.category ?? ""}
             onValueChange={(value) =>
-              lane.laneDocId && handleCategoryChange(lane.laneDocId, value)
+              updateLaneCategory(lane.laneDocId as string, value)
             }
           >
-            <SelectTrigger className="">
-              <SelectValue placeholder="Category" />
+            <SelectTrigger className="w-24 h-8">
+              <SelectValue placeholder="Cat" />
             </SelectTrigger>
             <SelectContent>
-              {Object.values(Category).map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {cat}
+              {categories.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+        )}
+      </div>
 
-          {lane.competitor && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => clearLane(lane.id)}
-            >
-              Clear
-            </Button>
+      {lane.competitor ? (
+        <div className="space-y-3">
+          <div className="font-medium text-gray-900">
+            {lane.competitor.name}
+          </div>
+
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Button
+                onClick={() => clearLane(lane.id)}
+                size="sm"
+                className="flex-1"
+              >
+                <Flag className="w-4 h-4 mr-1" />
+                Done
+              </Button>
+              {/* <Button
+                onClick={() => removeCompetitorFromLane(lane.id)}
+                size="sm"
+                variant="outline"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button> */}
+            </div>
           )}
         </div>
+      ) : (
+        <div className="text-gray-500 text-center py-4">Empty lane</div>
       )}
     </div>
   );
