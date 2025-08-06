@@ -19,6 +19,13 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import LanesConfig from "./components/LanesConfig";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../components/ui/tabs";
+import { CheckCircle, Flag, Users } from "lucide-react";
 
 interface Lane {
   id: number;
@@ -27,6 +34,7 @@ interface Lane {
 }
 
 export default function CompetitionPage() {
+  const [activeTab, setActiveTab] = useState("competitors");
   const { competitionId } = useParams<{ competitionId: string }>();
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -306,27 +314,102 @@ export default function CompetitionPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <Link to="/">Home</Link>
-      <div className="flex gap-4 h-full">
-        <CompetitorsList
-          competitionId={competitionId}
-          competitors={competitors}
-          removeCompetitor={removeCompetitor}
-          addCompetitor={addCompetitor}
-          fillLaneWithCompetitor={fillLaneWithCompetitor}
-        />
 
-        <Lanes
-          competitionId={competitionId}
-          lanes={lanes}
-          autoFillLanes={autoFillLanes}
-          clearLane={clearLane}
-          clearAllLanes={clearAllLanes}
-        />
+      {/* Desktop Layout - 3 Columns */}
+      <div className="hidden lg:flex">
+        <div className="w-1/3 border-r border-gray-200 bg-white">
+          <CompetitorsList
+            competitionId={competitionId}
+            competitors={competitors}
+            removeCompetitor={removeCompetitor}
+            addCompetitor={addCompetitor}
+            fillLaneWithCompetitor={fillLaneWithCompetitor}
+          />
+        </div>
 
-        <DoneCompetitorsList
-          doneCompetitors={doneCompetitors}
-          returnDoneCompetitorToLane={returnDoneCompetitorToLane}
-        />
+        <div className="w-1/3 border-r border-gray-200 bg-white">
+          <Lanes
+            competitionId={competitionId}
+            lanes={lanes}
+            autoFillLanes={autoFillLanes}
+            clearLane={clearLane}
+            clearAllLanes={clearAllLanes}
+          />
+        </div>
+
+        <div className="w-1/3 bg-white">
+          <DoneCompetitorsList
+            doneCompetitors={doneCompetitors}
+            returnDoneCompetitorToLane={returnDoneCompetitorToLane}
+          />
+        </div>
+      </div>
+
+      {/* Mobile/Tablet Layout - Tabs */}
+      <div className="lg:hidden h-[calc(100vh-80px)] bg-white">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="h-full flex flex-col"
+        >
+          <div className="border-b border-gray-200 px-4">
+            <TabsList className="grid w-full grid-cols-3 bg-gray-50">
+              <TabsTrigger
+                value="competitors"
+                className="flex items-center gap-1 sm:gap-2"
+              >
+                <Users className="w-4 h-4" />
+                <span className="hidden sm:inline">Competitors</span>
+                <span>({competitors.length})</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="lanes"
+                className="flex items-center gap-1 sm:gap-2"
+              >
+                <Flag className="w-4 h-4" />
+                <span className="hidden sm:inline">Lanes</span>
+                <span>
+                  ({99}/{lanes.length})
+                </span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="done"
+                className="flex items-center gap-1 sm:gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">Done</span>
+                <span>({99})</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="competitors" className="flex-1 m-0">
+            <CompetitorsList
+              competitionId={competitionId}
+              competitors={competitors}
+              removeCompetitor={removeCompetitor}
+              addCompetitor={addCompetitor}
+              fillLaneWithCompetitor={fillLaneWithCompetitor}
+            />
+          </TabsContent>
+
+          <TabsContent value="lanes" className="flex-1 m-0">
+            <Lanes
+              competitionId={competitionId}
+              lanes={lanes}
+              autoFillLanes={autoFillLanes}
+              clearLane={clearLane}
+              clearAllLanes={clearAllLanes}
+            />
+          </TabsContent>
+
+          <TabsContent value="done" className="flex-1 m-0">
+            <DoneCompetitorsList
+              doneCompetitors={doneCompetitors}
+              returnDoneCompetitorToLane={returnDoneCompetitorToLane}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
