@@ -16,7 +16,7 @@ import { Badge } from "../../../components/ui/badge";
 import CompetitorCard from "./CompetitorCard";
 
 const CompetitorsList = ({
-  competitionId,
+  exerciseId,
   competitors,
   removeCompetitor,
   addCompetitor,
@@ -52,7 +52,7 @@ const CompetitorsList = ({
               triggerIcon={<Plus className="w-5 h-5 text-blue-600" />}
             />
             <UploadCompetitorsCSV
-              competitionId={competitionId}
+              exerciseId={exerciseId}
               triggerButtonClass="p-2 rounded-full hover:bg-gray-100"
               triggerIcon={<Upload className="w-5 h-5 text-green-600" />}
             />

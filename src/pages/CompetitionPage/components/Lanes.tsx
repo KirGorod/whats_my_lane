@@ -32,7 +32,7 @@ interface Props {
   autoFillLanes: () => void;
   clearLane: (laneId: number) => void;
   clearAllLanes: () => void;
-  competitionId: string;
+  exerciseId: string;
   updateLaneCategory: (laneId: number, category: string) => void;
   moveToDone: (laneId: number) => void;
   removeCompetitorFromLane: (laneId: number) => void;
@@ -44,7 +44,7 @@ const Lanes = ({
   autoFillLanes,
   clearLane,
   clearAllLanes,
-  competitionId,
+  exerciseId,
   updateLaneCategory,
   moveToDone,
   removeCompetitorFromLane,
@@ -65,7 +65,7 @@ const Lanes = ({
         newId = existingIds.length + 1;
       }
 
-      await addDoc(collection(db, "competitions", competitionId, "lanes"), {
+      await addDoc(collection(db, "exercises", exerciseId, "lanes"), {
         id: newId,
         category: null,
         createdAt: serverTimestamp(),
@@ -129,7 +129,7 @@ const Lanes = ({
           <Lane
             key={lane.id}
             lane={lane}
-            competitionId={competitionId}
+            exerciseId={exerciseId}
             clearLane={clearLane}
           />
         ))}

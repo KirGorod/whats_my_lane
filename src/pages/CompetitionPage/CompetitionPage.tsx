@@ -35,18 +35,18 @@ interface Lane {
 
 export default function CompetitionPage() {
   const [activeTab, setActiveTab] = useState("competitors");
-  const { competitionId } = useParams<{ competitionId: string }>();
+  const { exerciseId } = useParams<{ exerciseId: string }>();
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
   const [lanes, setLanes] = useState<Lane[]>([]);
 
-  // 🔹 Don't do anything until we have a competitionId
+  // 🔹 Don't do anything until we have a exerciseId
   useEffect(() => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
 
     const waitingQuery = query(
-      collection(db, "competitions", competitionId, "competitors"),
+      collection(db, "exercises", exerciseId, "competitors"),
       where("status", "==", "waiting"),
       orderBy("order", "asc")
     );
@@ -57,7 +57,7 @@ export default function CompetitionPage() {
     });
 
     const doneQuery = query(
-      collection(db, "competitions", competitionId, "competitors"),
+      collection(db, "exercises", exerciseId, "competitors"),
       where("status", "==", "done"),
       orderBy("order", "desc")
     );
@@ -67,9 +67,9 @@ export default function CompetitionPage() {
       );
     });
 
-    const lanesRef = collection(db, "competitions", competitionId, "lanes");
+    const lanesRef = collection(db, "exercises", exerciseId, "lanes");
     const lanesQuery = query(
-      collection(db, "competitions", competitionId, "lanes"),
+      collection(db, "exercises", exerciseId, "lanes"),
       orderBy("id", "asc")
     );
 
@@ -83,7 +83,7 @@ export default function CompetitionPage() {
 
       // 🔹 Listen to competitors in lanes
       const laneQueryRef = query(
-        collection(db, "competitions", competitionId, "competitors"),
+        collection(db, "exercises", exerciseId, "competitors"),
         where("status", "==", "lane")
       );
       const unsubLaneAssignments = onSnapshot(laneQueryRef, (compSnap) => {
@@ -110,21 +110,18 @@ export default function CompetitionPage() {
       unsubDone();
       unsubLanesConfig();
     };
-  }, [competitionId]);
+  }, [exerciseId]);
 
   const addCompetitor = async (competitor: Omit<Competitor, "id">) => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
     try {
-      await addDoc(
-        collection(db, "competitions", competitionId, "competitors"),
-        {
-          ...competitor,
-          lane: null,
-          status: "waiting",
-          order: Date.now(),
-          createdAt: serverTimestamp(),
-        }
-      );
+      await addDoc(collection(db, "exercises", exerciseId, "competitors"), {
+        ...competitor,
+        lane: null,
+        status: "waiting",
+        order: Date.now(),
+        createdAt: serverTimestamp(),
+      });
       toast.success("Competitor added");
     } catch (err) {
       console.error(err);
@@ -133,18 +130,12 @@ export default function CompetitionPage() {
   };
 
   const removeCompetitor = async (index: number) => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
     const competitorToMove = competitors[index];
     if (!competitorToMove) return;
     try {
       await updateDoc(
-        doc(
-          db,
-          "competitions",
-          competitionId,
-          "competitors",
-          competitorToMove.id
-        ),
+        doc(db, "exercises", exerciseId, "competitors", competitorToMove.id),
         {
           lane: null,
           status: "done",
@@ -159,7 +150,7 @@ export default function CompetitionPage() {
   };
 
   const autoFillLanes = async () => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
     const emptyLanes = lanes.filter((lane) => !lane.competitor);
     if (emptyLanes.length === 0) {
       toast.error("All lanes are already occupied");
@@ -177,7 +168,7 @@ export default function CompetitionPage() {
         const matched = availableCompetitors[matchIndex];
         availableCompetitors.splice(matchIndex, 1);
         await updateDoc(
-          doc(db, "competitions", competitionId, "competitors", matched.id),
+          doc(db, "exercises", exerciseId, "competitors", matched.id),
           {
             lane: lane.id,
             status: "lane",
@@ -196,7 +187,7 @@ export default function CompetitionPage() {
   };
 
   const clearLane = async (laneId: number) => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
     const lane = lanes.find((l) => l.id === laneId);
     if (!lane?.competitor) {
       toast.warning(`No competitor on the Lane ${laneId}. Cannot remove...`);
@@ -205,13 +196,7 @@ export default function CompetitionPage() {
 
     try {
       await updateDoc(
-        doc(
-          db,
-          "competitions",
-          competitionId,
-          "competitors",
-          lane.competitor.id
-        ),
+        doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
         {
           lane: null,
           status: "done",
@@ -226,7 +211,7 @@ export default function CompetitionPage() {
   };
 
   const clearAllLanes = async () => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
     const laneCompetitors = lanes.filter((l) => l.competitor);
     if (laneCompetitors.length === 0) {
       toast.error("No lanes to clear");
@@ -237,13 +222,7 @@ export default function CompetitionPage() {
       for (const lane of laneCompetitors) {
         if (lane.competitor) {
           await updateDoc(
-            doc(
-              db,
-              "competitions",
-              competitionId,
-              "competitors",
-              lane.competitor.id
-            ),
+            doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
             {
               lane: null,
               status: "done",
@@ -260,7 +239,7 @@ export default function CompetitionPage() {
   };
 
   const fillLaneWithCompetitor = async (competitor: Competitor) => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
     const laneIndex = lanes.findIndex(
       (lane) =>
         lane.category === competitor.category && lane.competitor === null
@@ -271,7 +250,7 @@ export default function CompetitionPage() {
     }
     try {
       await updateDoc(
-        doc(db, "competitions", competitionId, "competitors", competitor.id),
+        doc(db, "exercises", exerciseId, "competitors", competitor.id),
         {
           lane: lanes[laneIndex].id,
           status: "lane",
@@ -284,7 +263,7 @@ export default function CompetitionPage() {
   };
 
   const returnDoneCompetitorToLane = async (competitor: Competitor) => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
     const laneIndex = lanes.findIndex(
       (lane) =>
         lane.category === competitor.category && lane.competitor === null
@@ -295,7 +274,7 @@ export default function CompetitionPage() {
     }
     try {
       await updateDoc(
-        doc(db, "competitions", competitionId, "competitors", competitor.id),
+        doc(db, "exercises", exerciseId, "competitors", competitor.id),
         {
           lane: lanes[laneIndex].id,
           status: "lane",
@@ -310,7 +289,7 @@ export default function CompetitionPage() {
     }
   };
 
-  if (!competitionId) {
+  if (!exerciseId) {
     return <p className="p-6 text-gray-500">Invalid competition</p>;
   }
 
@@ -322,7 +301,7 @@ export default function CompetitionPage() {
       <div className="hidden lg:flex">
         <div className="w-1/5 border-r border-gray-200 bg-white">
           <CompetitorsList
-            competitionId={competitionId}
+            exerciseId={exerciseId}
             competitors={competitors}
             removeCompetitor={removeCompetitor}
             addCompetitor={addCompetitor}
@@ -332,7 +311,7 @@ export default function CompetitionPage() {
 
         <div className="w-3/5 border-r border-gray-200 bg-white">
           <Lanes
-            competitionId={competitionId}
+            exerciseId={exerciseId}
             lanes={lanes}
             autoFillLanes={autoFillLanes}
             clearLane={clearLane}
@@ -388,7 +367,7 @@ export default function CompetitionPage() {
 
           <TabsContent value="competitors" className="flex-1 m-0">
             <CompetitorsList
-              competitionId={competitionId}
+              exerciseId={exerciseId}
               competitors={competitors}
               removeCompetitor={removeCompetitor}
               addCompetitor={addCompetitor}
@@ -398,7 +377,7 @@ export default function CompetitionPage() {
 
           <TabsContent value="lanes" className="flex-1 m-0">
             <Lanes
-              competitionId={competitionId}
+              exerciseId={exerciseId}
               lanes={lanes}
               autoFillLanes={autoFillLanes}
               clearLane={clearLane}

@@ -37,7 +37,7 @@ export default function CompetitionsPage() {
 
   const removeCompetition = async (id) => {
     try {
-      await deleteDoc(doc(db, "competitions", id));
+      await deleteDoc(doc(db, "exercises", id));
       toast.success("Competition removed");
     } catch (err) {
       console.error(err);

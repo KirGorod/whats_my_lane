@@ -13,7 +13,7 @@ const Header = () => {
     <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link to="/">
+          <Link to="/exercises">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
               Lane Competition Manager
             </h1>

@@ -40,7 +40,7 @@ const AddCompetition = ({ open, setOpen }) => {
       });
 
       const batch = writeBatch(db);
-      const lanesRef = collection(db, "competitions", compRef.id, "lanes");
+      const lanesRef = collection(db, "exercises", compRef.id, "lanes");
 
       for (let i = 1; i <= Number(lanes); i++) {
         const laneDoc = doc(lanesRef); // auto-ID

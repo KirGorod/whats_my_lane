@@ -10,26 +10,25 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 
-export default function LanesConfig({ competitionId }) {
+export default function LanesConfig({ exerciseId }) {
   const [lanes, setLanes] = useState([]);
 
   useEffect(() => {
-    if (!competitionId) return;
+    if (!exerciseId) return;
 
-    const lanesRef = collection(db, "competitions", competitionId, "lanes");
+    const lanesRef = collection(db, "exercises", exerciseId, "lanes");
     const unsub = onSnapshot(lanesRef, (snap) => {
       setLanes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
 
     return () => unsub();
-  }, [competitionId]);
+  }, [exerciseId]);
 
   const changeCategory = async (laneDocId, newCategory) => {
     try {
-      await updateDoc(
-        doc(db, "competitions", competitionId, "lanes", laneDocId),
-        { category: newCategory }
-      );
+      await updateDoc(doc(db, "exercises", exerciseId, "lanes", laneDocId), {
+        category: newCategory,
+      });
     } catch (err) {
       console.error(err);
     }

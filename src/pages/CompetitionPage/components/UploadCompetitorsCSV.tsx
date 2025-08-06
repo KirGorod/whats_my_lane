@@ -20,14 +20,14 @@ import {
 } from "firebase/firestore";
 import { Upload } from "lucide-react";
 
-export default function UploadCompetitorsCSV({ competitionId }) {
+export default function UploadCompetitorsCSV({ exerciseId }) {
   const [open, setOpen] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!competitionId) {
+    if (!exerciseId) {
       toast.error("Invalid competition ID");
       return;
     }
@@ -44,8 +44,8 @@ export default function UploadCompetitorsCSV({ competitionId }) {
         const batch = writeBatch(db);
         const competitorsRef = collection(
           db,
-          "competitions",
-          competitionId,
+          "exercises",
+          exerciseId,
           "competitors"
         );
 

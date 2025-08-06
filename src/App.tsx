@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import LoginPage from "./pages/LoginPage/LoginPage";
 import { AuthProvider } from "./context/AuthContext";
 import Header from "./components/main/Header";
+import ExercisesPage from "./pages/ExercisesPage/ExercisesPage";
 
 function App() {
   return (
@@ -13,8 +14,9 @@ function App() {
         <Header />
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/exercises" element={<ExercisesPage />} />
           <Route
-            path="/competitions/:competitionId"
+            path="/competitions/:exerciseId"
             element={<CompetitionPage />}
           />
           <Route path="/login" element={<LoginPage />} />

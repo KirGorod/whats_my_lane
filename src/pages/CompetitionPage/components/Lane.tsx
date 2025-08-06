@@ -13,7 +13,7 @@ import { Badge, Flag, Trash2 } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { toast } from "sonner";
 
-const Lane = ({ lane, competitionId, clearLane }) => {
+const Lane = ({ lane, exerciseId, clearLane }) => {
   const { isAdmin } = useAuth();
   const categories = Object.values(Category);
   const removeLane = async (laneDocId: string) => {
@@ -23,9 +23,7 @@ const Lane = ({ lane, competitionId, clearLane }) => {
     }
 
     try {
-      await deleteDoc(
-        doc(db, "competitions", competitionId, "lanes", laneDocId)
-      );
+      await deleteDoc(doc(db, "exercises", exerciseId, "lanes", laneDocId));
     } catch (err) {
       console.error("Error removing lane", err);
     }
@@ -36,10 +34,9 @@ const Lane = ({ lane, competitionId, clearLane }) => {
       return;
     }
     try {
-      await updateDoc(
-        doc(db, "competitions", competitionId, "lanes", laneDocId),
-        { category: newCategory }
-      );
+      await updateDoc(doc(db, "exercises", exerciseId, "lanes", laneDocId), {
+        category: newCategory,
+      });
     } catch (err) {
       console.error("Error updating category", err);
     }
