@@ -1,28 +1,10 @@
-import { useAuth } from "../../../context/AuthContext";
-import { Badge } from "../../../components/ui/badge";
-import { Button } from "../../../components/ui/button";
-import { CheckCircle, RotateCcw } from "lucide-react";
+import { CheckCircle } from "lucide-react";
+import DoneCompetitorCard from "./DoneCompetitorCard";
 
 const DoneCompetitorsList = ({
   doneCompetitors,
   returnDoneCompetitorToLane,
 }) => {
-  const { isAdmin } = useAuth();
-
-  const getBadgeVariant = (category: string | null) => {
-    if (!category) return "outline";
-    switch (category) {
-      case "H":
-        return "default";
-      case "R":
-        return "secondary";
-      case "N":
-        return "outline";
-      default:
-        return "default";
-    }
-  };
-
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow">
       {/* Header */}
@@ -42,41 +24,14 @@ const DoneCompetitorsList = ({
             No completed competitors yet
           </div>
         ) : (
-          // Show most recent first
-          [...doneCompetitors].reverse().map((competitor, index) => (
-            <div
-              key={`${competitor.id}-${index}`}
-              className="bg-green-50 border border-green-200 rounded-lg p-3"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="font-medium text-gray-900">
-                    {competitor.name}
-                  </div>
-                  <Badge
-                    variant={getBadgeVariant(competitor.category)}
-                    className="mt-1"
-                  >
-                    {competitor.category}
-                  </Badge>
-                </div>
-                <div className="text-xs text-gray-500">
-                  #{doneCompetitors.length - index}
-                </div>
-              </div>
-
-              {isAdmin && (
-                <Button
-                  onClick={() => returnDoneCompetitorToLane(competitor)}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <RotateCcw className="w-4 h-4 mr-1" />
-                  Return
-                </Button>
-              )}
-            </div>
+          [...doneCompetitors].map((competitor, index) => (
+            <DoneCompetitorCard
+              key={competitor.id}
+              index={index}
+              competitor={competitor}
+              doneCompetitors={doneCompetitors}
+              returnDoneCompetitorToLane={returnDoneCompetitorToLane}
+            />
           ))
         )}
       </div>

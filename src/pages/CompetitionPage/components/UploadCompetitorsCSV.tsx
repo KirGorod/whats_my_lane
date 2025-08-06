@@ -18,6 +18,7 @@ import {
   serverTimestamp,
   writeBatch,
 } from "firebase/firestore";
+import { Upload } from "lucide-react";
 
 export default function UploadCompetitorsCSV({ competitionId }) {
   const [open, setOpen] = useState(false);
@@ -87,8 +88,13 @@ export default function UploadCompetitorsCSV({ competitionId }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="mt-4">
-          Upload CSV
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-green-600 hover:text-green-800"
+          title="Upload competitors CSV"
+        >
+          <Upload className="w-5 h-5" />
         </Button>
       </DialogTrigger>
       <DialogContent>

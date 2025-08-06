@@ -198,7 +198,10 @@ export default function CompetitionPage() {
   const clearLane = async (laneId: number) => {
     if (!competitionId) return;
     const lane = lanes.find((l) => l.id === laneId);
-    if (!lane?.competitor) return;
+    if (!lane?.competitor) {
+      toast.warning(`No competitor on the Lane ${laneId}. Cannot remove...`);
+      return;
+    }
 
     try {
       await updateDoc(
@@ -317,7 +320,7 @@ export default function CompetitionPage() {
 
       {/* Desktop Layout - 3 Columns */}
       <div className="hidden lg:flex">
-        <div className="w-1/4 border-r border-gray-200 bg-white">
+        <div className="w-1/5 border-r border-gray-200 bg-white">
           <CompetitorsList
             competitionId={competitionId}
             competitors={competitors}
@@ -327,7 +330,7 @@ export default function CompetitionPage() {
           />
         </div>
 
-        <div className="w-1/2 border-r border-gray-200 bg-white">
+        <div className="w-3/5 border-r border-gray-200 bg-white">
           <Lanes
             competitionId={competitionId}
             lanes={lanes}
@@ -337,7 +340,7 @@ export default function CompetitionPage() {
           />
         </div>
 
-        <div className="w-1/4 bg-white">
+        <div className="w-1/5 bg-white">
           <DoneCompetitorsList
             doneCompetitors={doneCompetitors}
             returnDoneCompetitorToLane={returnDoneCompetitorToLane}

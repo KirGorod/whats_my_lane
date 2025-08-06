@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { Category } from "../../../types/category";
+import { Plus } from "lucide-react";
 
 const AddCompetitorDialog = ({ addCompetitor }) => {
   const [open, setOpen] = useState(false);
@@ -28,7 +29,14 @@ const AddCompetitorDialog = ({ addCompetitor }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">Add competitor</Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-blue-600 hover:text-blue-800"
+          title="Add competitor"
+        >
+          <Plus className="w-5 h-5" />
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <form
