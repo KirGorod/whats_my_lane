@@ -39,7 +39,7 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }) => {
         <div className="flex items-center justify-between">
           <Link
             to={`/competitions/${exercise.id}`}
-            className="font-semibold text-blue-600 hover:underline"
+            className="font-semibold cursor-pointer"
           >
             <CardTitle className="text-lg flex items-center gap-2">
               <Dumbbell className="w-5 h-5" />

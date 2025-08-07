@@ -295,8 +295,6 @@ export default function CompetitionPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <Link to="/">Home</Link>
-
       {/* Desktop Layout - 3 Columns */}
       <div className="hidden lg:flex">
         <div className="w-1/5 border-r border-gray-200 bg-white">

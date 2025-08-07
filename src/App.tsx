@@ -1,5 +1,4 @@
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
-import HomePage from "./pages/HomePage/HomePage";
 import CompetitionPage from "./pages/CompetitionPage/CompetitionPage";
 import { Toaster } from "sonner";
 import LoginPage from "./pages/LoginPage/LoginPage";
@@ -13,8 +12,7 @@ function App() {
       <Router>
         <Header />
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/exercises" element={<ExercisesPage />} />
+          <Route path="/" element={<ExercisesPage />} />
           <Route
             path="/competitions/:exerciseId"
             element={<CompetitionPage />}
