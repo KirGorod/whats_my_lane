@@ -83,13 +83,27 @@ const Lane = ({ lane, exerciseId, clearLane }) => {
           <div>{lane.category}</div>
         )}
       </div>
-      {lane.competitor ? (
-        <div className="font-medium text-center text-gray-900">
-          {lane.competitor.name}
-        </div>
-      ) : (
-        <div className="text-gray-500 text-center">Empty lane</div>
-      )}
+      <div className="space-y-2 text-center">
+        {lane.competitor ? (
+          <div>
+            <div className="text-sm text-gray-600">Now</div>
+            <div className="font-semibold text-blue-900">
+              {lane.competitor.name}
+            </div>
+          </div>
+        ) : (
+          <div className="text-gray-400">No competitor</div>
+        )}
+
+        {lane.readyUp ? (
+          <div>
+            <div className="text-sm text-gray-500">Next</div>
+            <div className="text-sm text-gray-700">{lane.readyUp.name}</div>
+          </div>
+        ) : (
+          <div className="text-xs text-gray-300">No readyUp</div>
+        )}
+      </div>
 
       <div className="space-y-3">
         {isAdmin && (

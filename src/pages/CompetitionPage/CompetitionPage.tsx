@@ -29,8 +29,10 @@ import { CheckCircle, Flag, Users } from "lucide-react";
 
 interface Lane {
   id: number;
-  category: Category;
-  competitor: Competitor | null;
+  category: string | null;
+  competitor: Competitor | null; // Now
+  readyUp: Competitor | null; // Next
+  laneDocId?: string;
 }
 
 export default function CompetitionPage() {
@@ -41,15 +43,15 @@ export default function CompetitionPage() {
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
   const [lanes, setLanes] = useState<Lane[]>([]);
 
-  // 🔹 Don't do anything until we have a exerciseId
   useEffect(() => {
     if (!exerciseId) return;
 
     const waitingQuery = query(
       collection(db, "exercises", exerciseId, "competitors"),
       where("status", "==", "waiting"),
-      orderBy("order", "asc")
+      orderBy("orderRank", "asc")
     );
+
     const unsubWaiting = onSnapshot(waitingQuery, (snap) => {
       setCompetitors(
         snap.docs.map((d) => ({ id: d.id, ...d.data() } as Competitor))
@@ -67,64 +69,39 @@ export default function CompetitionPage() {
       );
     });
 
-    const lanesRef = collection(db, "exercises", exerciseId, "lanes");
     const lanesQuery = query(
       collection(db, "exercises", exerciseId, "lanes"),
       orderBy("id", "asc")
     );
 
-    const unsubLanesConfig = onSnapshot(lanesQuery, (lanesSnap) => {
-      const lanesFromDb = lanesSnap.docs.map((docSnap) => ({
-        id: docSnap.data().id,
-        category: docSnap.data().category,
-        competitor: null,
-        laneDocId: docSnap.id,
-      }));
-
-      // 🔹 Listen to competitors in lanes
-      const laneQueryRef = query(
-        collection(db, "exercises", exerciseId, "competitors"),
-        where("status", "==", "lane")
-      );
-      const unsubLaneAssignments = onSnapshot(laneQueryRef, (compSnap) => {
-        const laneAssignments = compSnap.docs.map(
-          (d) => ({ id: d.id, ...d.data() } as Competitor)
-        );
-
-        // Merge lane config with lane assignments
-        setLanes(
-          lanesFromDb.map((lane) => {
-            const match = laneAssignments.find(
-              (c) => c.lane === lane.id && c.category === lane.category
-            );
-            return { ...lane, competitor: match || null };
-          })
-        );
-      });
-
-      return () => unsubLaneAssignments();
+    const unsubLanes = onSnapshot(lanesQuery, (snap) => {
+      const lanesData: Lane[] = snap.docs.map((doc) => ({
+        laneDocId: doc.id,
+        ...doc.data(),
+      })) as Lane[];
+      setLanes(lanesData);
     });
 
     return () => {
       unsubWaiting();
       unsubDone();
-      unsubLanesConfig();
+      unsubLanes();
     };
   }, [exerciseId]);
 
   const addCompetitor = async (competitor: Omit<Competitor, "id">) => {
     if (!exerciseId) return;
     try {
+      const maxRank = Math.max(...competitors.map((c) => c.orderRank ?? 0), 0);
+
       await addDoc(collection(db, "exercises", exerciseId, "competitors"), {
         ...competitor,
-        lane: null,
         status: "waiting",
-        order: Date.now(),
+        orderRank: maxRank + 1,
         createdAt: serverTimestamp(),
       });
       toast.success("Competitor added");
     } catch (err) {
-      console.error(err);
       toast.error("Error adding competitor");
     }
   };
@@ -137,7 +114,6 @@ export default function CompetitionPage() {
       await updateDoc(
         doc(db, "exercises", exerciseId, "competitors", competitorToMove.id),
         {
-          lane: null,
           status: "done",
           order: Date.now(),
         }
@@ -151,143 +127,312 @@ export default function CompetitionPage() {
 
   const autoFillLanes = async () => {
     if (!exerciseId) return;
-    const emptyLanes = lanes.filter((lane) => !lane.competitor);
-    if (emptyLanes.length === 0) {
-      toast.error("All lanes are already occupied");
+
+    let remainingCompetitors = [...competitors].filter(
+      (c) => c.status === "waiting"
+    );
+
+    if (remainingCompetitors.length === 0) {
+      toast.error("No available competitors to fill");
       return;
     }
 
-    let availableCompetitors = [...competitors];
-    let unfilledCount = 0;
+    const batchPromises: Promise<void>[] = [];
 
-    for (const lane of emptyLanes) {
-      const matchIndex = availableCompetitors.findIndex(
+    // 🔹 Step 1: Fill "competitor" (Now)
+    for (const lane of lanes) {
+      if (!lane.category || lane.competitor) continue;
+
+      const match = remainingCompetitors.find(
         (c) => c.category === lane.category
       );
-      if (matchIndex !== -1) {
-        const matched = availableCompetitors[matchIndex];
-        availableCompetitors.splice(matchIndex, 1);
-        await updateDoc(
-          doc(db, "exercises", exerciseId, "competitors", matched.id),
-          {
-            lane: lane.id,
-            status: "lane",
-          }
+
+      if (match) {
+        batchPromises.push(
+          updateDoc(
+            doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
+            {
+              competitor: {
+                id: match.id,
+                name: match.name,
+                category: match.category,
+              },
+            }
+          )
         );
-      } else {
-        unfilledCount++;
+
+        batchPromises.push(
+          updateDoc(doc(db, "exercises", exerciseId, "competitors", match.id), {
+            status: "lane",
+          })
+        );
+
+        remainingCompetitors = remainingCompetitors.filter(
+          (c) => c.id !== match.id
+        );
       }
     }
 
-    if (unfilledCount > 0) {
-      toast.warning(`${unfilledCount} lane(s) were not filled`);
-    } else {
-      toast.success("All empty lanes filled successfully");
+    // 🔹 Step 2: Fill "readyUp" (Next) only for lanes where competitor is set
+    for (const lane of lanes) {
+      if (!lane.category || !lane.competitor || lane.readyUp) continue;
+
+      const match = remainingCompetitors.find(
+        (c) => c.category === lane.category
+      );
+
+      if (match) {
+        batchPromises.push(
+          updateDoc(
+            doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
+            {
+              readyUp: {
+                id: match.id,
+                name: match.name,
+                category: match.category,
+              },
+            }
+          )
+        );
+
+        batchPromises.push(
+          updateDoc(doc(db, "exercises", exerciseId, "competitors", match.id), {
+            status: "ready",
+          })
+        );
+
+        remainingCompetitors = remainingCompetitors.filter(
+          (c) => c.id !== match.id
+        );
+      }
+    }
+
+    if (batchPromises.length === 0) {
+      toast.error("No lanes could be filled");
+      return;
+    }
+
+    try {
+      await Promise.all(batchPromises);
+      toast.success("Lanes filled successfully");
+    } catch (err) {
+      console.error("Auto-fill failed", err);
+      toast.error("Error filling lanes");
     }
   };
 
   const clearLane = async (laneId: number) => {
     if (!exerciseId) return;
+
     const lane = lanes.find((l) => l.id === laneId);
-    if (!lane?.competitor) {
-      toast.warning(`No competitor on the Lane ${laneId}. Cannot remove...`);
+    if (!lane || !lane.laneDocId) {
+      toast.error("Lane not found");
       return;
     }
 
+    const updates: any = {};
+
+    // Step 1: Move current competitor to done
+    if (lane.competitor) {
+      try {
+        await updateDoc(
+          doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
+          {
+            status: "done",
+            order: Date.now(),
+          }
+        );
+      } catch (err) {
+        console.error("Failed to mark competitor as done", err);
+        toast.error("Failed to mark current competitor as done");
+        return;
+      }
+    }
+
+    // Step 2: Move readyUp to competitor slot
+    if (lane.readyUp) {
+      updates.competitor = { ...lane.readyUp };
+      updates.readyUp = null;
+
+      try {
+        await updateDoc(
+          doc(db, "exercises", exerciseId, "competitors", lane.readyUp.id),
+          {
+            status: "lane",
+          }
+        );
+      } catch (err) {
+        console.error("Failed to update ready competitor", err);
+        toast.error("Failed to move next competitor into lane");
+        return;
+      }
+    } else {
+      updates.competitor = null;
+      updates.readyUp = null;
+    }
+
+    // Step 3: Update lane in Firestore
     try {
       await updateDoc(
-        doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
-        {
-          lane: null,
-          status: "done",
-          order: Date.now(),
-        }
+        doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
+        updates
       );
-      toast.success(`Lane ${laneId} cleared`);
+      toast.success("Lane cleared");
     } catch (err) {
-      console.error(err);
-      toast.error("Error clearing lane");
+      console.error("Failed to update lane", err);
+      toast.error("Error updating lane");
     }
   };
 
   const clearAllLanes = async () => {
     if (!exerciseId) return;
-    const laneCompetitors = lanes.filter((l) => l.competitor);
-    if (laneCompetitors.length === 0) {
-      toast.error("No lanes to clear");
+
+    const batchPromises: Promise<void>[] = [];
+
+    for (const lane of lanes) {
+      if (!lane.laneDocId) continue;
+
+      const laneUpdates: any = {
+        competitor: null,
+        readyUp: null,
+      };
+
+      // 1. Mark current competitor as done
+      if (lane.competitor) {
+        batchPromises.push(
+          updateDoc(
+            doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
+            {
+              status: "done",
+              order: Date.now(),
+            }
+          )
+        );
+      }
+
+      // 2. Move readyUp → competitor
+      if (lane.readyUp) {
+        laneUpdates.competitor = { ...lane.readyUp };
+
+        batchPromises.push(
+          updateDoc(
+            doc(db, "exercises", exerciseId, "competitors", lane.readyUp.id),
+            {
+              status: "lane",
+            }
+          )
+        );
+      }
+
+      // 3. Update lane with new competitor and cleared readyUp
+      batchPromises.push(
+        updateDoc(
+          doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
+          laneUpdates
+        )
+      );
+    }
+
+    if (batchPromises.length === 0) {
+      toast.error("No lanes to update");
       return;
     }
 
     try {
-      for (const lane of laneCompetitors) {
-        if (lane.competitor) {
-          await updateDoc(
-            doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
-            {
-              lane: null,
-              status: "done",
-              order: Date.now(),
-            }
-          );
-        }
-      }
-      toast.success(`Cleared ${laneCompetitors.length} lane(s)`);
+      await Promise.all(batchPromises);
+      toast.success("Next round started");
     } catch (err) {
-      console.error(err);
-      toast.error("Error clearing lanes");
+      console.error("Next round failed", err);
+      toast.error("Error starting next round");
     }
   };
 
   const fillLaneWithCompetitor = async (competitor: Competitor) => {
     if (!exerciseId) return;
-    const laneIndex = lanes.findIndex(
-      (lane) =>
-        lane.category === competitor.category && lane.competitor === null
+
+    // Step 1: Find all lanes matching competitor's category
+    const matchingLanes = lanes.filter(
+      (lane) => lane.category === competitor.category
     );
-    if (laneIndex === -1) {
-      toast.error(`No empty lane for category ${competitor.category}`);
+
+    if (matchingLanes.length === 0) {
+      toast.error(`No lanes configured for category "${competitor.category}"`);
       return;
     }
-    try {
-      await updateDoc(
-        doc(db, "exercises", exerciseId, "competitors", competitor.id),
-        {
-          lane: lanes[laneIndex].id,
-          status: "lane",
-        }
-      );
-    } catch (err) {
-      console.error(err);
-      toast.error("Error filling lane");
+
+    // Step 2: Try to assign to empty 'competitor' slot (Now)
+    const emptyNowLane = matchingLanes.find((lane) => !lane.competitor);
+    if (emptyNowLane) {
+      try {
+        await updateDoc(
+          doc(db, "exercises", exerciseId, "lanes", emptyNowLane.laneDocId!),
+          {
+            competitor: {
+              id: competitor.id,
+              name: competitor.name,
+              category: competitor.category,
+            },
+          }
+        );
+
+        await updateDoc(
+          doc(db, "exercises", exerciseId, "competitors", competitor.id),
+          {
+            status: "lane",
+          }
+        );
+
+        toast.success(`${competitor.name} assigned to lane ${emptyNowLane.id}`);
+        return;
+      } catch (err) {
+        console.error(err);
+        toast.error("Error assigning to lane");
+        return;
+      }
     }
+
+    // Step 3: Try to assign to empty 'readyUp' slot (Next)
+    const emptyReadyLane = matchingLanes.find(
+      (lane) => lane.competitor && !lane.readyUp
+    );
+    if (emptyReadyLane) {
+      try {
+        await updateDoc(
+          doc(db, "exercises", exerciseId, "lanes", emptyReadyLane.laneDocId!),
+          {
+            readyUp: {
+              id: competitor.id,
+              name: competitor.name,
+              category: competitor.category,
+            },
+          }
+        );
+
+        await updateDoc(
+          doc(db, "exercises", exerciseId, "competitors", competitor.id),
+          {
+            status: "ready",
+          }
+        );
+
+        toast.success(
+          `${competitor.name} queued for lane ${emptyReadyLane.id}`
+        );
+        return;
+      } catch (err) {
+        console.error(err);
+        toast.error("Error assigning to ready slot");
+        return;
+      }
+    }
+
+    // Step 4: No slots available
+    toast.error(
+      `All lanes for "${competitor.category}" are full. Try again later.`
+    );
   };
 
-  const returnDoneCompetitorToLane = async (competitor: Competitor) => {
-    if (!exerciseId) return;
-    const laneIndex = lanes.findIndex(
-      (lane) =>
-        lane.category === competitor.category && lane.competitor === null
-    );
-    if (laneIndex === -1) {
-      toast.error(`No empty lane for category ${competitor.category}`);
-      return;
-    }
-    try {
-      await updateDoc(
-        doc(db, "exercises", exerciseId, "competitors", competitor.id),
-        {
-          lane: lanes[laneIndex].id,
-          status: "lane",
-        }
-      );
-      toast.success(
-        `${competitor.name} returned to lane ${lanes[laneIndex].id}`
-      );
-    } catch (err) {
-      console.error(err);
-      toast.error("Error returning competitor");
-    }
-  };
+  const returnDoneCompetitorToLane = async () => {};
 
   if (!exerciseId) {
     return <p className="p-6 text-gray-500">Invalid competition</p>;

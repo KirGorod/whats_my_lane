@@ -51,18 +51,19 @@ export default function UploadCompetitorsCSV({ exerciseId }) {
 
         let addedCount = 0;
 
-        for (const row of parsedData) {
+        for (let i = 0; i < parsedData.length; i++) {
+          addedCount++;
+          const row = parsedData[i];
           if (row.name && row.category) {
-            const newDocRef = doc(competitorsRef); // generates ID now
+            const newDocRef = doc(competitorsRef);
             batch.set(newDocRef, {
               name: row.name.trim(),
               category: row.category.trim(),
               lane: null,
               status: "waiting",
-              order: Date.now(),
+              orderRank: i, // 👈 replaces csvOrderIndex
               createdAt: serverTimestamp(),
             });
-            addedCount++;
           }
         }
 

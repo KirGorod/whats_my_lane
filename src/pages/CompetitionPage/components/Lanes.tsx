@@ -23,7 +23,8 @@ interface Competitor {
 interface Lane {
   id: number;
   category: string | null;
-  competitor: Competitor | null;
+  competitor: Competitor | null; // Now
+  readyUp: Competitor | null; // Next
   laneDocId?: string;
 }
 
@@ -105,7 +106,7 @@ const Lanes = ({
               disabled={occupiedLanes === 0}
             >
               <RotateCcw className="w-4 h-4 mr-1" />
-              Clear All
+              Next Round
             </Button>
             <Button
               onClick={addLane}
