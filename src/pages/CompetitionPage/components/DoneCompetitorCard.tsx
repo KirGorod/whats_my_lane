@@ -31,11 +31,7 @@ const DoneCompetitorCard = ({
       </div>
 
       {isAdmin && (
-        <div
-          className="max-h-0 opacity-0 overflow-hidden 
-                 group-hover:max-h-20 group-hover:opacity-100
-                 transition-all duration-300 ease-in-out"
-        >
+        <div className="max-h-20">
           <div className="flex justify-start gap-1 pt-2">
             <Button
               onClick={() => returnDoneCompetitorToLane(competitor)}
@@ -47,34 +43,6 @@ const DoneCompetitorCard = ({
             </Button>
           </div>
         </div>
-      )}
-    </div>
-  );
-
-  return (
-    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex flex-col gap-1">
-          <div className="font-medium text-gray-900">{competitor.name}</div>
-          <Badge className={getBadgeColor(competitor.category)}>
-            {competitor.category || "—"}
-          </Badge>
-        </div>
-        <div className="text-xs text-gray-500">
-          #{doneCompetitors.length - index}
-        </div>
-      </div>
-
-      {isAdmin && (
-        <Button
-          onClick={() => returnDoneCompetitorToLane(competitor)}
-          size="sm"
-          variant="outline"
-          className="w-full"
-        >
-          <RotateCcw className="w-4 h-4 mr-1" />
-          Return
-        </Button>
       )}
     </div>
   );

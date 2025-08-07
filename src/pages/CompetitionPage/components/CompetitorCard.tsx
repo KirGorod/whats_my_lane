@@ -24,14 +24,10 @@ const CompetitorCard = ({
       </div>
 
       {isAdmin && (
-        <div
-          className="max-h-0 opacity-0 overflow-hidden 
-                 group-hover:max-h-20 group-hover:opacity-100
-                 transition-all duration-300 ease-in-out"
-        >
+        <div className="max-h-20 ">
           <div className="flex justify-between gap-1 pt-2">
             <Button
-              onClick={() => removeCompetitor(index)}
+              onClick={() => removeCompetitor(competitor)}
               variant="ghost"
               size="icon"
               className="text-red-500 hover:text-red-700"

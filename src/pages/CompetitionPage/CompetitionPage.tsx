@@ -106,19 +106,17 @@ export default function CompetitionPage() {
     }
   };
 
-  const removeCompetitor = async (index: number) => {
+  const removeCompetitor = async (competitor: Competitor) => {
     if (!exerciseId) return;
-    const competitorToMove = competitors[index];
-    if (!competitorToMove) return;
     try {
       await updateDoc(
-        doc(db, "exercises", exerciseId, "competitors", competitorToMove.id),
+        doc(db, "exercises", exerciseId, "competitors", competitor.id),
         {
           status: "done",
           order: Date.now(),
         }
       );
-      toast.success("Marked as done");
+      toast.success(`Competitor ${competitor.name} removed.`);
     } catch (err) {
       console.error(err);
       toast.error("Error updating competitor");
@@ -432,7 +430,47 @@ export default function CompetitionPage() {
     );
   };
 
-  const returnDoneCompetitorToLane = async () => {};
+  const returnDoneCompetitorToLane = async (competitor: Competitor) => {
+    if (!exerciseId) return;
+
+    const availableLane = lanes.find(
+      (lane) =>
+        lane.category === competitor.category &&
+        lane.competitor === null &&
+        lane.readyUp === null
+    );
+
+    if (!availableLane) {
+      toast.error(`No free lane for category ${competitor.category}`);
+      return;
+    }
+
+    try {
+      await Promise.all([
+        updateDoc(
+          doc(db, "exercises", exerciseId, "lanes", availableLane.laneDocId!),
+          {
+            competitor: {
+              id: competitor.id,
+              name: competitor.name,
+              category: competitor.category,
+            },
+          }
+        ),
+        updateDoc(
+          doc(db, "exercises", exerciseId, "competitors", competitor.id),
+          {
+            status: "lane",
+          }
+        ),
+      ]);
+
+      toast.success(`${competitor.name} assigned to lane ${availableLane.id}`);
+    } catch (err) {
+      console.error("Failed to return competitor", err);
+      toast.error("Failed to return competitor to lane");
+    }
+  };
 
   if (!exerciseId) {
     return <p className="p-6 text-gray-500">Invalid competition</p>;
