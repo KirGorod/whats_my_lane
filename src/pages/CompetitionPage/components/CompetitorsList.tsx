@@ -39,12 +39,14 @@ type Competitor = {
 
 const SortableCompetitorRow = ({
   competitor,
+  position,
   disabled,
   fillLaneWithCompetitor,
   removeCompetitor,
 }: {
   competitor: Competitor;
   disabled: boolean;
+  position: number;
   fillLaneWithCompetitor: (c: Competitor) => void;
   removeCompetitor: (c: Competitor) => void;
 }) => {
@@ -68,6 +70,7 @@ const SortableCompetitorRow = ({
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <CompetitorCard
         competitor={competitor}
+        position={position}
         fillLaneWithCompetitor={fillLaneWithCompetitor}
         removeCompetitor={removeCompetitor}
       />
@@ -236,10 +239,11 @@ const CompetitorsList = ({
               items={filteredIds} // ← match rendered items
               strategy={verticalListSortingStrategy}
             >
-              {filteredCompetitors.map((competitor) => (
+              {filteredCompetitors.map((competitor, index) => (
                 <SortableCompetitorRow
                   key={competitor.id}
                   competitor={competitor}
+                  position={index + 1}
                   disabled={draggingDisabled}
                   fillLaneWithCompetitor={fillLaneWithCompetitor}
                   removeCompetitor={removeCompetitor}
