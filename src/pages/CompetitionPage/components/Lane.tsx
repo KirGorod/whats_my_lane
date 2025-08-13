@@ -7,9 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { Category } from "../../../types/category";
 import { db } from "../../../firebase";
-import { Clock, Flag, Play, Trash2 } from "lucide-react";
+import { Clock, Play, Trash2, Flag } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { toast } from "sonner";
 import {
@@ -19,71 +18,110 @@ import {
   CardTitle,
 } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
+import type { ExerciseType } from "../../../types/exercise";
+import type { LaneModel, LaneType } from "../../../types/lane";
+import { getAllowedCategoriesForLane } from "../../../utils/laneRules";
 
-const Lane = ({ lane, exerciseId, clearLane }) => {
+function badgeClass(laneType: LaneType | null) {
+  switch (laneType) {
+    case "paralympic":
+      return "bg-purple-100 text-purple-700";
+    case "kettle":
+      return "bg-orange-100 text-orange-700";
+    case "defaultBench":
+      return "bg-blue-100 text-blue-700";
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
+}
+
+export default function Lane({
+  lane,
+  exerciseId,
+  clearLane,
+  laneTypeOptions,
+  exerciseType,
+}: {
+  lane: LaneModel;
+  exerciseId: string;
+  clearLane: (laneId: number) => void;
+  laneTypeOptions: LaneType[];
+  exerciseType: ExerciseType;
+}) {
   const { isAdmin } = useAuth();
-  const categories = Object.values(Category);
-  const getCategoryColor = () => {};
+
   const removeLane = async (laneDocId: string) => {
     if (lane.competitor) {
       toast.warning("Cannot remove lane while it has a competitor");
       return;
     }
-
     try {
       await deleteDoc(doc(db, "exercises", exerciseId, "lanes", laneDocId));
     } catch (err) {
       console.error("Error removing lane", err);
     }
   };
-  const updateLaneCategory = async (laneDocId: string, newCategory: string) => {
+
+  const updateLaneType = async (laneDocId: string, newLaneType: LaneType) => {
     if (lane.competitor) {
-      toast.warning("Cannot change category when lane has a competitor");
+      toast.warning("Cannot change lane type when lane has a competitor");
       return;
     }
     try {
       await updateDoc(doc(db, "exercises", exerciseId, "lanes", laneDocId), {
-        category: newCategory,
+        laneType: newLaneType, // canonical
+        category: newLaneType, // mirror for back-compat
       });
     } catch (err) {
-      console.error("Error updating category", err);
+      console.error("Error updating lane type", err);
     }
   };
+
+  const allowedCats = getAllowedCategoriesForLane(exerciseType, lane.laneType);
 
   return (
     <Card key={lane.id} className="border border-gray-200 flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Lane {lane.id}</CardTitle>
+
           <div className="flex items-center gap-2">
             {isAdmin ? (
               <Select
-                value={lane.category ?? ""}
+                disabled={!laneTypeOptions.length}
+                value={lane.laneType ?? ""}
                 onValueChange={(value) =>
-                  updateLaneCategory(lane.laneDocId as string, value)
+                  updateLaneType(lane.laneDocId as string, value as LaneType)
                 }
               >
-                <SelectTrigger className="w-24 h-8">
-                  <SelectValue placeholder="Cat" />
+                <SelectTrigger className="w-36 h-8">
+                  <SelectValue placeholder="Lane type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
+                  {laneTypeOptions.map((lt) => (
+                    <SelectItem key={lt} value={lt}>
+                      {lt}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
-              <Badge className={getCategoryColor(lane.category)}>
-                {lane.category}
+              <Badge className={badgeClass(lane.laneType)}>
+                {lane.laneType ?? "—"}
               </Badge>
             )}
           </div>
         </div>
+
+        {/* Allowed categories helper */}
+        {!!allowedCats.length && (
+          <div className="mt-2 text-xs text-gray-500">
+            Allowed: {allowedCats.join(", ")}
+          </div>
+        )}
       </CardHeader>
 
-      {/* Make content grow and push footer down */}
+      {/* Content */}
       <CardContent className="space-y-3 flex-grow">
         {/* Now */}
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
@@ -95,6 +133,9 @@ const Lane = ({ lane, exerciseId, clearLane }) => {
             <div className="flex flex-col leading-tight">
               <div className="font-medium text-green-900 whitespace-pre-line">
                 {lane.competitor.name}
+              </div>
+              <div className="text-xs text-green-700">
+                {lane.competitor.category}
               </div>
             </div>
           ) : (
@@ -115,6 +156,9 @@ const Lane = ({ lane, exerciseId, clearLane }) => {
               <div className="font-medium text-yellow-900 whitespace-pre-line">
                 {lane.readyUp.name}
               </div>
+              <div className="text-xs text-yellow-700">
+                {lane.readyUp.category}
+              </div>
             </div>
           ) : (
             <div className="text-sm text-yellow-600 italic">
@@ -124,9 +168,9 @@ const Lane = ({ lane, exerciseId, clearLane }) => {
         </div>
       </CardContent>
 
-      {/* Buttons stick to bottom */}
+      {/* Footer */}
       {isAdmin && (
-        <div className="flex items-center justify-between gap-2 px-4">
+        <div className="flex items-center justify-between gap-2 px-4 pb-3">
           <Button
             onClick={() => clearLane(lane.id)}
             size="sm"
@@ -150,6 +194,4 @@ const Lane = ({ lane, exerciseId, clearLane }) => {
       )}
     </Card>
   );
-};
-
-export default Lane;
+}

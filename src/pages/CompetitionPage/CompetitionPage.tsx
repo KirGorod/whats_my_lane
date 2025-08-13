@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import type { Competitor } from "../../types/competitor";
-import { Category } from "../../types/category";
+import type { ExerciseType } from "../../types/exercise";
+import type { LaneModel, LaneType } from "../../types/lane";
+import { LANE_TYPES } from "../../types/lane";
 import CompetitorsList from "./components/CompetitorsList";
 import Lanes from "./components/Lanes";
 import DoneCompetitorsList from "./components/DoneCompetitorsList";
@@ -18,7 +20,6 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
-import LanesConfig from "./components/LanesConfig";
 import {
   Tabs,
   TabsContent,
@@ -26,23 +27,39 @@ import {
   TabsTrigger,
 } from "../../components/ui/tabs";
 import { CheckCircle, Flag, Users } from "lucide-react";
+import { isCategoryAllowedForLane } from "../../utils/laneRules";
 
-interface Lane {
-  id: number;
-  category: string | null;
-  competitor: Competitor | null; // Now
-  readyUp: Competitor | null; // Next
-  laneDocId?: string;
-}
+// Normalize legacy exercise types to the new ones
+const normalizeExerciseType = (raw: any): ExerciseType => {
+  const v = String(raw ?? "").toLowerCase();
+  if (v === "bench" || v === "kettle" || v === "airbike" || v === "rowing")
+    return v as ExerciseType;
+  if (v === "strength") return "bench";
+  if (v === "cardio") return "airbike";
+  if (v === "flexibility") return "rowing";
+  return "bench";
+};
 
 export default function CompetitionPage() {
   const [activeTab, setActiveTab] = useState("competitors");
   const { exerciseId } = useParams<{ exerciseId: string }>();
 
+  const [exerciseType, setExerciseType] = useState<ExerciseType>("bench");
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
-  const [lanes, setLanes] = useState<Lane[]>([]);
+  const [lanes, setLanes] = useState<LaneModel[]>([]);
 
+  // Load exercise meta (type) and normalize
+  useEffect(() => {
+    if (!exerciseId) return;
+    const unsub = onSnapshot(doc(db, "exercises", exerciseId), (snap) => {
+      const data = snap.data() as any;
+      setExerciseType(normalizeExerciseType(data?.type));
+    });
+    return () => unsub();
+  }, [exerciseId]);
+
+  // Live collections
   useEffect(() => {
     if (!exerciseId) return;
 
@@ -51,7 +68,6 @@ export default function CompetitionPage() {
       where("status", "==", "waiting"),
       orderBy("orderRank", "asc")
     );
-
     const unsubWaiting = onSnapshot(waitingQuery, (snap) => {
       setCompetitors(
         snap.docs.map((d) => ({ id: d.id, ...d.data() } as Competitor))
@@ -73,12 +89,26 @@ export default function CompetitionPage() {
       collection(db, "exercises", exerciseId, "lanes"),
       orderBy("id", "asc")
     );
-
     const unsubLanes = onSnapshot(lanesQuery, (snap) => {
-      const lanesData: Lane[] = snap.docs.map((doc) => ({
-        laneDocId: doc.id,
-        ...doc.data(),
-      })) as Lane[];
+      const lanesData: LaneModel[] = snap.docs.map((d) => {
+        const data = d.data() as any;
+        const laneType: LaneType | null = (
+          LANE_TYPES as readonly string[]
+        ).includes(data.laneType)
+          ? (data.laneType as LaneType)
+          : (LANE_TYPES as readonly string[]).includes(data.category)
+          ? (data.category as LaneType)
+          : null;
+
+        return {
+          laneDocId: d.id,
+          id: data.id,
+          laneType,
+          category: laneType, // mirror for back-compat
+          competitor: data.competitor ?? null,
+          readyUp: data.readyUp ?? null,
+        } as LaneModel;
+      });
       setLanes(lanesData);
     });
 
@@ -89,11 +119,16 @@ export default function CompetitionPage() {
     };
   }, [exerciseId]);
 
+  const waitingCompetitors = useMemo(
+    () => competitors.filter((c) => c.status === "waiting"),
+    [competitors]
+  );
+
+  // CRUD helpers
   const addCompetitor = async (competitor: Omit<Competitor, "id">) => {
     if (!exerciseId) return;
     try {
       const maxRank = Math.max(...competitors.map((c) => c.orderRank ?? 0), 0);
-
       await addDoc(collection(db, "exercises", exerciseId, "competitors"), {
         ...competitor,
         status: "waiting",
@@ -101,7 +136,7 @@ export default function CompetitionPage() {
         createdAt: serverTimestamp(),
       });
       toast.success("Competitor added");
-    } catch (err) {
+    } catch {
       toast.error("Error adding competitor");
     }
   };
@@ -111,10 +146,7 @@ export default function CompetitionPage() {
     try {
       await updateDoc(
         doc(db, "exercises", exerciseId, "competitors", competitor.id),
-        {
-          status: "done",
-          order: Date.now(),
-        }
+        { status: "done", order: Date.now() }
       );
       toast.success(`Competitor ${competitor.name} removed.`);
     } catch (err) {
@@ -123,30 +155,26 @@ export default function CompetitionPage() {
     }
   };
 
+  /** Auto-fill: fill NOW first, then READYUP; both respect laneType rules */
   const autoFillLanes = async () => {
     if (!exerciseId) return;
 
-    let remainingCompetitors = [...competitors].filter(
-      (c) => c.status === "waiting"
-    );
-
-    if (remainingCompetitors.length === 0) {
+    let remaining = [...waitingCompetitors];
+    if (!remaining.length) {
       toast.error("No available competitors to fill");
       return;
     }
 
-    const batchPromises: Promise<void>[] = [];
+    const batch: Promise<void>[] = [];
 
-    // 🔹 Step 1: Fill "competitor" (Now)
+    // Step 1: Fill NOW
     for (const lane of lanes) {
-      if (!lane.category || lane.competitor) continue;
-
-      const match = remainingCompetitors.find(
-        (c) => c.category === lane.category
+      if (!lane.laneType || lane.competitor) continue;
+      const match = remaining.find((c) =>
+        isCategoryAllowedForLane(exerciseType, lane.laneType, c.category)
       );
-
       if (match) {
-        batchPromises.push(
+        batch.push(
           updateDoc(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
@@ -156,31 +184,25 @@ export default function CompetitionPage() {
                 category: match.category,
               },
             }
-          )
+          ) as unknown as Promise<void>
         );
-
-        batchPromises.push(
+        batch.push(
           updateDoc(doc(db, "exercises", exerciseId, "competitors", match.id), {
             status: "lane",
-          })
+          }) as unknown as Promise<void>
         );
-
-        remainingCompetitors = remainingCompetitors.filter(
-          (c) => c.id !== match.id
-        );
+        remaining = remaining.filter((c) => c.id !== match.id);
       }
     }
 
-    // 🔹 Step 2: Fill "readyUp" (Next) only for lanes where competitor is set
+    // Step 2: Fill READYUP
     for (const lane of lanes) {
-      if (!lane.category || !lane.competitor || lane.readyUp) continue;
-
-      const match = remainingCompetitors.find(
-        (c) => c.category === lane.category
+      if (!lane.laneType || !lane.competitor || lane.readyUp) continue;
+      const match = remaining.find((c) =>
+        isCategoryAllowedForLane(exerciseType, lane.laneType, c.category)
       );
-
       if (match) {
-        batchPromises.push(
+        batch.push(
           updateDoc(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
@@ -190,28 +212,24 @@ export default function CompetitionPage() {
                 category: match.category,
               },
             }
-          )
+          ) as unknown as Promise<void>
         );
-
-        batchPromises.push(
+        batch.push(
           updateDoc(doc(db, "exercises", exerciseId, "competitors", match.id), {
             status: "ready",
-          })
+          }) as unknown as Promise<void>
         );
-
-        remainingCompetitors = remainingCompetitors.filter(
-          (c) => c.id !== match.id
-        );
+        remaining = remaining.filter((c) => c.id !== match.id);
       }
     }
 
-    if (batchPromises.length === 0) {
+    if (!batch.length) {
       toast.error("No lanes could be filled");
       return;
     }
 
     try {
-      await Promise.all(batchPromises);
+      await Promise.all(batch);
       toast.success("Lanes filled successfully");
     } catch (err) {
       console.error("Auto-fill failed", err);
@@ -221,7 +239,6 @@ export default function CompetitionPage() {
 
   const clearLane = async (laneId: number) => {
     if (!exerciseId) return;
-
     const lane = lanes.find((l) => l.id === laneId);
     if (!lane || !lane.laneDocId) {
       toast.error("Lane not found");
@@ -230,15 +247,12 @@ export default function CompetitionPage() {
 
     const updates: any = {};
 
-    // Step 1: Move current competitor to done
+    // NOW -> done
     if (lane.competitor) {
       try {
         await updateDoc(
           doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
-          {
-            status: "done",
-            order: Date.now(),
-          }
+          { status: "done", order: Date.now() }
         );
       } catch (err) {
         console.error("Failed to mark competitor as done", err);
@@ -247,17 +261,14 @@ export default function CompetitionPage() {
       }
     }
 
-    // Step 2: Move readyUp to competitor slot
+    // READYUP -> NOW or clear
     if (lane.readyUp) {
       updates.competitor = { ...lane.readyUp };
       updates.readyUp = null;
-
       try {
         await updateDoc(
           doc(db, "exercises", exerciseId, "competitors", lane.readyUp.id),
-          {
-            status: "lane",
-          }
+          { status: "lane" }
         );
       } catch (err) {
         console.error("Failed to update ready competitor", err);
@@ -269,7 +280,6 @@ export default function CompetitionPage() {
       updates.readyUp = null;
     }
 
-    // Step 3: Update lane in Firestore
     try {
       await updateDoc(
         doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
@@ -284,60 +294,47 @@ export default function CompetitionPage() {
 
   const clearAllLanes = async () => {
     if (!exerciseId) return;
-
-    const batchPromises: Promise<void>[] = [];
+    const batch: Promise<void>[] = [];
 
     for (const lane of lanes) {
       if (!lane.laneDocId) continue;
 
-      const laneUpdates: any = {
-        competitor: null,
-        readyUp: null,
-      };
+      const laneUpdates: any = { competitor: null, readyUp: null };
 
-      // 1. Mark current competitor as done
       if (lane.competitor) {
-        batchPromises.push(
+        batch.push(
           updateDoc(
             doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
-            {
-              status: "done",
-              order: Date.now(),
-            }
-          )
+            { status: "done", order: Date.now() }
+          ) as unknown as Promise<void>
         );
       }
 
-      // 2. Move readyUp → competitor
       if (lane.readyUp) {
         laneUpdates.competitor = { ...lane.readyUp };
-
-        batchPromises.push(
+        batch.push(
           updateDoc(
             doc(db, "exercises", exerciseId, "competitors", lane.readyUp.id),
-            {
-              status: "lane",
-            }
-          )
+            { status: "lane" }
+          ) as unknown as Promise<void>
         );
       }
 
-      // 3. Update lane with new competitor and cleared readyUp
-      batchPromises.push(
+      batch.push(
         updateDoc(
           doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
           laneUpdates
-        )
+        ) as unknown as Promise<void>
       );
     }
 
-    if (batchPromises.length === 0) {
+    if (!batch.length) {
       toast.error("No lanes to update");
       return;
     }
 
     try {
-      await Promise.all(batchPromises);
+      await Promise.all(batch);
       toast.success("Next round started");
     } catch (err) {
       console.error("Next round failed", err);
@@ -345,25 +342,25 @@ export default function CompetitionPage() {
     }
   };
 
+  // Single assign (drag/click)
   const fillLaneWithCompetitor = async (competitor: Competitor) => {
     if (!exerciseId) return;
 
-    // Step 1: Find all lanes matching competitor's category
-    const matchingLanes = lanes.filter(
-      (lane) => lane.category === competitor.category
+    // Try NOW
+    const nowLane = lanes.find(
+      (lane) =>
+        lane.laneType &&
+        !lane.competitor &&
+        isCategoryAllowedForLane(
+          exerciseType,
+          lane.laneType,
+          competitor.category
+        )
     );
-
-    if (matchingLanes.length === 0) {
-      toast.error(`No lanes configured for category "${competitor.category}"`);
-      return;
-    }
-
-    // Step 2: Try to assign to empty 'competitor' slot (Now)
-    const emptyNowLane = matchingLanes.find((lane) => !lane.competitor);
-    if (emptyNowLane) {
+    if (nowLane) {
       try {
         await updateDoc(
-          doc(db, "exercises", exerciseId, "lanes", emptyNowLane.laneDocId!),
+          doc(db, "exercises", exerciseId, "lanes", nowLane.laneDocId!),
           {
             competitor: {
               id: competitor.id,
@@ -372,15 +369,11 @@ export default function CompetitionPage() {
             },
           }
         );
-
         await updateDoc(
           doc(db, "exercises", exerciseId, "competitors", competitor.id),
-          {
-            status: "lane",
-          }
+          { status: "lane" }
         );
-
-        toast.success(`${competitor.name} assigned to lane ${emptyNowLane.id}`);
+        toast.success(`${competitor.name} assigned to lane ${nowLane.id}`);
         return;
       } catch (err) {
         console.error(err);
@@ -389,14 +382,22 @@ export default function CompetitionPage() {
       }
     }
 
-    // Step 3: Try to assign to empty 'readyUp' slot (Next)
-    const emptyReadyLane = matchingLanes.find(
-      (lane) => lane.competitor && !lane.readyUp
+    // Try READYUP
+    const readyLane = lanes.find(
+      (lane) =>
+        lane.laneType &&
+        lane.competitor &&
+        !lane.readyUp &&
+        isCategoryAllowedForLane(
+          exerciseType,
+          lane.laneType,
+          competitor.category
+        )
     );
-    if (emptyReadyLane) {
+    if (readyLane) {
       try {
         await updateDoc(
-          doc(db, "exercises", exerciseId, "lanes", emptyReadyLane.laneDocId!),
+          doc(db, "exercises", exerciseId, "lanes", readyLane.laneDocId!),
           {
             readyUp: {
               id: competitor.id,
@@ -405,17 +406,11 @@ export default function CompetitionPage() {
             },
           }
         );
-
         await updateDoc(
           doc(db, "exercises", exerciseId, "competitors", competitor.id),
-          {
-            status: "ready",
-          }
+          { status: "ready" }
         );
-
-        toast.success(
-          `${competitor.name} queued for lane ${emptyReadyLane.id}`
-        );
+        toast.success(`${competitor.name} queued for lane ${readyLane.id}`);
         return;
       } catch (err) {
         console.error(err);
@@ -424,10 +419,7 @@ export default function CompetitionPage() {
       }
     }
 
-    // Step 4: No slots available
-    toast.error(
-      `All lanes for "${competitor.category}" are full. Try again later.`
-    );
+    toast.error(`No compatible lane available for "${competitor.category}"`);
   };
 
   const returnDoneCompetitorToLane = async (competitor: Competitor) => {
@@ -435,13 +427,18 @@ export default function CompetitionPage() {
 
     const availableLane = lanes.find(
       (lane) =>
-        lane.category === competitor.category &&
+        lane.laneType &&
         lane.competitor === null &&
-        lane.readyUp === null
+        lane.readyUp === null &&
+        isCategoryAllowedForLane(
+          exerciseType,
+          lane.laneType,
+          competitor.category
+        )
     );
 
     if (!availableLane) {
-      toast.error(`No free lane for category ${competitor.category}`);
+      toast.error(`No free compatible lane for ${competitor.category}`);
       return;
     }
 
@@ -456,15 +453,12 @@ export default function CompetitionPage() {
               category: competitor.category,
             },
           }
-        ),
+        ) as unknown as Promise<void>,
         updateDoc(
           doc(db, "exercises", exerciseId, "competitors", competitor.id),
-          {
-            status: "lane",
-          }
-        ),
+          { status: "lane" }
+        ) as unknown as Promise<void>,
       ]);
-
       toast.success(`${competitor.name} assigned to lane ${availableLane.id}`);
     } catch (err) {
       console.error("Failed to return competitor", err);
@@ -476,9 +470,11 @@ export default function CompetitionPage() {
     return <p className="p-6 text-gray-500">Invalid competition</p>;
   }
 
+  const activeLanesCount = lanes.filter((l) => !!l.competitor).length;
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Desktop Layout - 3 Columns */}
+      {/* Desktop */}
       <div className="hidden lg:flex">
         <div className="w-1/5 border-r border-gray-200 bg-white">
           <CompetitorsList
@@ -508,7 +504,7 @@ export default function CompetitionPage() {
         </div>
       </div>
 
-      {/* Mobile/Tablet Layout - Tabs */}
+      {/* Mobile/Tablet */}
       <div className="lg:hidden h-[calc(100vh-80px)] bg-white">
         <Tabs
           value={activeTab}
@@ -532,7 +528,7 @@ export default function CompetitionPage() {
                 <Flag className="w-4 h-4" />
                 <span className="hidden sm:inline">Lanes</span>
                 <span>
-                  ({99}/{lanes.length})
+                  ({activeLanesCount}/{lanes.length})
                 </span>
               </TabsTrigger>
               <TabsTrigger
@@ -541,7 +537,7 @@ export default function CompetitionPage() {
               >
                 <CheckCircle className="w-4 h-4" />
                 <span className="hidden sm:inline">Done</span>
-                <span>({99})</span>
+                <span>({doneCompetitors.length})</span>
               </TabsTrigger>
             </TabsList>
           </div>

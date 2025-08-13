@@ -1,11 +1,11 @@
 export type ExerciseStatus = "planned" | "ongoing" | "finished";
-export type ExerciseType = "strength" | "cardio" | "flexibility" | "other";
+export type ExerciseType = "bench" | "kettle" | "airbike" | "rowing";
 
 export interface Exercise {
   id: string;
   name: string;
   status: ExerciseStatus;
-  timeToStart: string; // ISO date string
+  timeToStart: string; // ISO string
   numberOfLanes: number;
   type: ExerciseType;
 }
@@ -18,7 +18,7 @@ export const statusOptions = [
 
 export const exerciseTypes = [
   { value: "bench", label: "Bench Press" },
-  { value: "kettle", label: "Kattlebell Jerk" },
+  { value: "kettle", label: "Kettlebell Jerk" },
   { value: "airbike", label: "Air Bike" },
   { value: "rowing", label: "Concept Rowing" },
 ] as const;
