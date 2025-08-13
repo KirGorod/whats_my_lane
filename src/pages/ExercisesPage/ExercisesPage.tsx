@@ -14,18 +14,35 @@ import {
 } from "firebase/firestore";
 import { toast } from "sonner";
 import ExerciseCard from "./components/ExerciseCard";
+import { useAuth } from "../../context/AuthContext";
 
 const ExercisesPage = () => {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
-    const q = query(collection(db, "exercises"), orderBy("timeToStart", "asc"));
+    const q = query(collection(db, "exercises"));
     const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Exercise, "id">),
-      }));
+      const STATUS_ORDER = { ongoing: 0, planned: 1, finished: 2 } as const;
+
+      const data = snapshot.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Exercise, "id">),
+        }))
+        .sort((a, b) => {
+          const byStatus =
+            STATUS_ORDER[a.status as keyof typeof STATUS_ORDER] -
+            STATUS_ORDER[b.status as keyof typeof STATUS_ORDER];
+          if (byStatus !== 0) return byStatus;
+          // tie-breaker: earlier start first
+          return (
+            new Date(a.timeToStart).getTime() -
+            new Date(b.timeToStart).getTime()
+          );
+        });
+
       setExercises(data);
     });
     return () => unsub();
@@ -46,21 +63,36 @@ const ExercisesPage = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 h-full overflow-auto">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+    <div className="min-h-screen p-4 sm:p-6">
+      {/* Centered container */}
+      <div className="max-w-2xl mx-auto">
+        {isAdmin ? (
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Exercises</h1>
+            {/* Header */}
+            <h1 className="text-3xl font-bold text-center text-gray-900">
+              Exercises
+            </h1>
+
+            {/* Add button centered under header */}
+            <div className="mt-4 mb-6 flex justify-center">
+              <AddExercise
+                editingExercise={editingExercise}
+                setEditingExercise={setEditingExercise}
+              />
+            </div>
           </div>
+        ) : (
+          <div>
+            {/* Header */}
+            <h1 className="text-3xl font-bold text-center text-gray-900 mb-5">
+              Exercises
+            </h1>
+          </div>
+        )}
 
-          <AddExercise
-            editingExercise={editingExercise}
-            setEditingExercise={setEditingExercise}
-          />
-        </div>
-
+        {/* Content */}
         {exercises.length === 0 ? (
-          <Card>
+          <Card className="w-full">
             <CardContent className="text-center py-12">
               <Dumbbell className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -69,16 +101,18 @@ const ExercisesPage = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          // LIST (centered via max-w and mx-auto above)
+          <ul className="space-y-3">
             {exercises.map((exercise) => (
-              <ExerciseCard
-                key={exercise.id}
-                exercise={exercise}
-                handleEdit={handleEdit}
-                handleDelete={handleDelete}
-              />
+              <li key={exercise.id}>
+                <ExerciseCard
+                  exercise={exercise}
+                  handleEdit={handleEdit}
+                  handleDelete={handleDelete}
+                />
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </div>
