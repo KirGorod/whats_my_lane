@@ -21,7 +21,6 @@ import { statusOptions } from "../../../types/exercise";
 import { Link } from "react-router-dom";
 import { statusBadgeClass } from "../../../utils/statusStyles";
 
-// realtime counts
 import { useEffect, useState } from "react";
 import { db } from "../../../firebase";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
@@ -48,25 +47,45 @@ function useCompetitorCounts(exerciseId: string) {
   return { total, waiting };
 }
 
-const ExerciseCard = ({ exercise, handleEdit, handleDelete }) => {
+type Props = {
+  exercise: any;
+  handleEdit: (e: any) => void;
+  handleDelete: (e: any) => void;
+};
+
+const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
   const { total, waiting } = useCompetitorCounts(exercise.id);
   const { isAdmin } = useAuth();
 
-  return (
-    <Card className="w-full hover:shadow-sm transition-shadow">
+  const Title = (
+    <CardTitle className="text-base sm:text-lg flex items-center gap-2 truncate group-hover:underline">
+      <Dumbbell className="w-5 h-5 shrink-0" />
+      <span className="truncate">{exercise.name}</span>
+    </CardTitle>
+  );
+
+  const Inner = (
+    <Card
+      className={`w-full transition-shadow transition-colors duration-150
+    ${
+      isAdmin
+        ? "hover:shadow-sm hover:bg-accent/40"
+        : "hover:shadow-md hover:bg-accent cursor-pointer group"
+    }`}
+    >
       <CardHeader className="p-4 pb-2">
         <div className="flex items-start justify-between gap-3">
-          <Link
-            to={`/competitions/${exercise.id}`}
-            className="flex-1 min-w-0 group"
-          >
-            <CardTitle className="text-base sm:text-lg flex items-center gap-2 truncate">
-              <Dumbbell className="w-5 h-5 shrink-0" />
-              <span className="truncate group-hover:underline">
-                {exercise.name}
-              </span>
-            </CardTitle>
-          </Link>
+          {/* Title: link only for admin; for non-admin, whole card is link */}
+          {isAdmin ? (
+            <Link
+              to={`/competitions/${exercise.id}`}
+              className="flex-1 min-w-0 group"
+            >
+              {Title}
+            </Link>
+          ) : (
+            <div className="flex-1 min-w-0">{Title}</div>
+          )}
 
           {isAdmin && (
             <div className="flex items-center gap-1">
@@ -106,7 +125,6 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }) => {
           )}
         </div>
 
-        {/* status + lanes (keep as chips if you like) */}
         <div className="flex gap-2 flex-wrap mt-2">
           <span
             className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadgeClass(
@@ -123,16 +141,15 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }) => {
 
       <CardContent className="p-4 pt-0">
         <div className="space-y-2 text-sm">
-          <div className="flex items-center gap-3">
-            <span className="font-medium text-gray-700">Time to Start:</span>
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-gray-700">Time to Start</span>
             <span className="text-gray-600">
               {new Date(exercise.timeToStart).toLocaleString()}
             </span>
           </div>
 
-          {/* ✅ Competitors info moved here */}
-          <div className="flex items-center gap-3">
-            <span className="font-medium text-gray-700">Competitors:</span>
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-gray-700">Competitors</span>
             <span className="text-gray-600">
               {total} {total === 1 ? "competitor" : "competitors"}
               {typeof waiting === "number" ? ` (${waiting} waiting)` : ""}
@@ -142,6 +159,18 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }) => {
       </CardContent>
     </Card>
   );
+
+  // For non-admins, wrap the whole card with Link (no nested links inside)
+  if (!isAdmin) {
+    return (
+      <Link to={`/competitions/${exercise.id}`} className="block">
+        {Inner}
+      </Link>
+    );
+  }
+
+  // Admin sees original behavior
+  return Inner;
 };
 
 export default ExerciseCard;
