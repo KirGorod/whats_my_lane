@@ -17,22 +17,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog";
-import { statusOptions, type ExerciseStatus } from "../../../types/exercise";
+import { statusOptions } from "../../../types/exercise";
 import { Link } from "react-router-dom";
+import { statusBadgeClass } from "../../../utils/statusStyles";
 
 const ExerciseCard = ({ exercise, handleEdit, handleDelete }) => {
-  const getStatusColor = (status: ExerciseStatus) => {
-    switch (status) {
-      case "planned":
-        return "bg-yellow-100 text-yellow-800";
-      case "ongoing":
-        return "bg-blue-100 text-blue-800";
-      case "finished":
-        return "bg-green-100 text-green-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
   return (
     <Card key={exercise.id} className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
@@ -84,7 +73,7 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }) => {
 
         <div className="flex gap-2 flex-wrap mt-2">
           <span
-            className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+            className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadgeClass(
               exercise.status
             )}`}
           >

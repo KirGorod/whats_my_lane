@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Competitor } from "../../types/competitor";
-import type { ExerciseType } from "../../types/exercise";
+import type { ExerciseType, ExerciseStatus } from "../../types/exercise";
 import type { LaneModel, LaneType } from "../../types/lane";
 import { LANE_TYPES } from "../../types/lane";
 import CompetitorsList from "./components/CompetitorsList";
 import Lanes from "./components/Lanes";
 import DoneCompetitorsList from "./components/DoneCompetitorsList";
+import CompetitionHeader from "./components/CompetitionHeader";
 import { toast } from "sonner";
 import { db } from "../../firebase";
 import {
@@ -29,7 +30,6 @@ import {
 import { CheckCircle, Flag, Users } from "lucide-react";
 import { isCategoryAllowedForLane } from "../../utils/laneRules";
 
-// Normalize legacy exercise types to the new ones
 const normalizeExerciseType = (raw: any): ExerciseType => {
   const v = String(raw ?? "").toLowerCase();
   if (v === "bench" || v === "kettle" || v === "airbike" || v === "rowing")
@@ -45,16 +45,31 @@ export default function CompetitionPage() {
   const { exerciseId } = useParams<{ exerciseId: string }>();
 
   const [exerciseType, setExerciseType] = useState<ExerciseType>("bench");
+  const [exerciseName, setExerciseName] = useState<string | undefined>(
+    undefined
+  );
+  const [exerciseStatus, setExerciseStatus] =
+    useState<ExerciseStatus>("planned");
+
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
   const [lanes, setLanes] = useState<LaneModel[]>([]);
 
-  // Load exercise meta (type) and normalize
+  // Load exercise meta (name, status, type)
   useEffect(() => {
     if (!exerciseId) return;
     const unsub = onSnapshot(doc(db, "exercises", exerciseId), (snap) => {
       const data = snap.data() as any;
+      if (!data) return;
       setExerciseType(normalizeExerciseType(data?.type));
+      setExerciseName(data?.name);
+      if (
+        data?.status === "planned" ||
+        data?.status === "ongoing" ||
+        data?.status === "finished"
+      ) {
+        setExerciseStatus(data.status);
+      }
     });
     return () => unsub();
   }, [exerciseId]);
@@ -342,7 +357,6 @@ export default function CompetitionPage() {
     }
   };
 
-  // Single assign (drag/click)
   const fillLaneWithCompetitor = async (competitor: Competitor) => {
     if (!exerciseId) return;
 
@@ -474,6 +488,14 @@ export default function CompetitionPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      {/* Header with name and status */}
+      <CompetitionHeader
+        exerciseId={exerciseId}
+        name={exerciseName}
+        status={exerciseStatus}
+        type={exerciseType}
+      />
+
       {/* Desktop */}
       <div className="hidden lg:flex">
         <div className="w-1/5 border-r border-gray-200 bg-white">
