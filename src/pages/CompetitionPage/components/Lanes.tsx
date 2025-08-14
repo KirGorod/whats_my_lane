@@ -5,16 +5,24 @@ import {
   serverTimestamp,
   doc,
   onSnapshot,
+  writeBatch,
+  getDocs,
+  orderBy,
+  limit,
+  query,
 } from "firebase/firestore";
 import { db } from "../../../firebase";
+import { where as whereFilter } from "firebase/firestore";
 import { useAuth } from "../../../context/AuthContext";
 import { Button } from "../../../components/ui/button";
-import { Flag, Zap, RotateCcw } from "lucide-react";
+import { Flag, Zap, RotateCcw, ArrowBigRightDash } from "lucide-react";
 import Lane from "./Lane";
 import type { LaneModel, LaneType } from "../../../types/lane";
 import type { ExerciseType } from "../../../types/exercise";
 import { LANE_TYPES_BY_EXERCISE } from "../../../config/laneTypesByExercise";
 import { LANE_TYPES } from "../../../types/lane";
+import type { ActionHistory } from "../../../types/history";
+import { toast } from "sonner";
 
 interface Props {
   lanes: LaneModel[];
@@ -54,6 +62,53 @@ export default function Lanes({
     });
     return () => unsub();
   }, [exerciseId]);
+
+  const undoLastAction = async () => {
+    if (!exerciseId) return;
+
+    try {
+      // last non-undone action
+      const q = query(
+        collection(db, "exercises", exerciseId, "actions"),
+        whereFilter("undone", "==", false),
+        orderBy("createdAt", "desc"),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        toast.message("Nothing to undo");
+        return;
+      }
+      const docSnap = snap.docs[0];
+      const action = docSnap.data() as ActionHistory;
+
+      // Best-effort revert in one batch.
+      // (If you want strict protection, do this in a transaction and verify current == action.after.)
+      const batch = writeBatch(db);
+
+      for (const lp of action.lanes) {
+        batch.update(doc(db, "exercises", exerciseId, "lanes", lp.laneDocId), {
+          competitor: lp.before.competitor ?? null,
+          readyUp: lp.before.readyUp ?? null,
+        });
+      }
+
+      for (const cp of action.competitors) {
+        batch.update(
+          doc(db, "exercises", exerciseId, "competitors", cp.competitorId),
+          { status: cp.beforeStatus }
+        );
+      }
+
+      batch.update(docSnap.ref, { undone: true, undoneAt: serverTimestamp() });
+
+      await batch.commit();
+      toast.success("Undone");
+    } catch (err) {
+      console.error("Undo failed", err);
+      toast.error("Failed to undo last action (state changed?)");
+    }
+  };
 
   // Options for the Select: mapping or fallback to all lane types (so it's never empty)
   const laneTypeOptions = useMemo<LaneType[]>(() => {
@@ -123,7 +178,7 @@ export default function Lanes({
               className="flex-1"
               disabled={occupiedLanes === 0}
             >
-              <RotateCcw className="w-4 h-4 mr-1" />
+              <ArrowBigRightDash />
               Next Round
             </Button>
             <Button
@@ -132,7 +187,16 @@ export default function Lanes({
               variant="secondary"
               className="flex-1"
             >
-              + Lane
+              <span className="font-bold">+</span> Lane
+            </Button>
+            <Button
+              onClick={undoLastAction}
+              size="sm"
+              variant="outline"
+              className="flex-1"
+            >
+              <RotateCcw />
+              Undo
             </Button>
           </div>
         )}

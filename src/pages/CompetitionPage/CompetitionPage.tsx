@@ -144,6 +144,41 @@ export default function CompetitionPage() {
     [competitors]
   );
 
+  function groupLanesByType(
+    lanes: LaneModel[],
+    predicate: (l: LaneModel) => boolean
+  ): Map<LaneType, LaneModel[]> {
+    const m = new Map<LaneType, LaneModel[]>();
+    for (const l of lanes) {
+      if (!l.laneType) continue;
+      if (!predicate(l)) continue;
+      const arr = m.get(l.laneType) ?? [];
+      arr.push(l);
+      m.set(l.laneType, arr);
+    }
+    for (const [k, arr] of m) arr.sort((a, b) => a.id - b.id);
+    return m;
+  }
+
+  function makeWaitingByCategory(waiting: Competitor[]) {
+    const m = new Map<string, Competitor[]>();
+    for (const c of waiting) {
+      const arr = m.get(c.category) ?? [];
+      arr.push(c); // your waiting list is already ordered by orderRank asc
+      m.set(c.category, arr);
+    }
+    return {
+      pop(cat: string): Competitor | undefined {
+        const arr = m.get(cat);
+        if (!arr?.length) return undefined;
+        const c = arr.shift()!;
+        if (arr.length) m.set(cat, arr);
+        else m.delete(cat);
+        return c;
+      },
+    };
+  }
+
   // CRUD helpers
   const addCompetitor = async (competitor: Omit<Competitor, "id">) => {
     if (!exerciseId) return;
@@ -175,37 +210,52 @@ export default function CompetitionPage() {
     }
   };
 
-  /** Auto-fill: fill NOW first, then READYUP; both respect laneType rules */
+  /** Auto-fill with history (category-first per lane type) */
   const autoFillLanes = async () => {
     if (!exerciseId) return;
 
-    // Always use current waiting list (already ordered by orderRank asc by your query)
     const waitingAll = competitors.filter((c) => c.status === "waiting");
-    if (!waitingAll.length) {
-      toast.error("No available competitors to fill");
-      return;
-    }
+    if (!waitingAll.length)
+      return toast.error("No available competitors to fill");
 
-    // We'll do a single batch for NOW + READYUP
     const batch = writeBatch(db);
-    let assignedNow = 0;
-    let assignedReady = 0;
-
-    // Shared mutable pool of waiting competitors by category
+    const lanePatches: LanePatch[] = [];
+    const compPatches: CompetitorPatch[] = [];
     const waitingByCat = makeWaitingByCategory(waitingAll);
 
-    // ---- 1) Fill NOW (empty lanes) ----
+    // ---- 1) NOW (empty lanes) ----
     const freeByType = groupLanesByType(lanes, (l) => !l.competitor);
     for (const [laneType, freeLanes] of freeByType) {
       const priority = getAllowedCategoriesForLane(exerciseType, laneType);
       if (!priority.length) continue;
 
-      const queue = [...freeLanes]; // left→right by id
+      const queue = [...freeLanes];
       for (const cat of priority) {
         while (queue.length) {
           const c = waitingByCat.pop(cat);
-          if (!c) break; // go to next category
+          if (!c) break;
           const lane = queue.shift()!;
+
+          // record patch
+          lanePatches.push({
+            laneDocId: lane.laneDocId!,
+            laneId: lane.id,
+            before: {
+              competitor: lane.competitor ?? null,
+              readyUp: lane.readyUp ?? null,
+            },
+            after: {
+              competitor: { id: c.id, name: c.name, category: c.category },
+              readyUp: lane.readyUp ?? null,
+            },
+          });
+          compPatches.push({
+            competitorId: c.id,
+            beforeStatus: "waiting",
+            afterStatus: "lane",
+          });
+
+          // writes
           batch.update(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
@@ -215,13 +265,12 @@ export default function CompetitionPage() {
           batch.update(doc(db, "exercises", exerciseId, "competitors", c.id), {
             status: "lane",
           });
-          assignedNow++;
         }
-        if (!queue.length) break; // all NOW slots for this type filled
+        if (!queue.length) break;
       }
     }
 
-    // ---- 2) Fill READYUP (lanes with NOW but no READYUP) ----
+    // ---- 2) READYUP (lanes with NOW but no READYUP) ----
     const needReadyByType = groupLanesByType(
       lanes,
       (l) => !!l.competitor && !l.readyUp
@@ -230,12 +279,31 @@ export default function CompetitionPage() {
       const priority = getAllowedCategoriesForLane(exerciseType, laneType);
       if (!priority.length) continue;
 
-      const queue = [...needReady]; // left→right by id
+      const queue = [...needReady];
       for (const cat of priority) {
         while (queue.length) {
           const c = waitingByCat.pop(cat);
-          if (!c) break; // next category
+          if (!c) break;
           const lane = queue.shift()!;
+
+          lanePatches.push({
+            laneDocId: lane.laneDocId!,
+            laneId: lane.id,
+            before: {
+              competitor: lane.competitor ?? null,
+              readyUp: lane.readyUp ?? null,
+            },
+            after: {
+              competitor: lane.competitor ?? null,
+              readyUp: { id: c.id, name: c.name, category: c.category },
+            },
+          });
+          compPatches.push({
+            competitorId: c.id,
+            beforeStatus: "waiting",
+            afterStatus: "ready",
+          });
+
           batch.update(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
@@ -245,22 +313,28 @@ export default function CompetitionPage() {
           batch.update(doc(db, "exercises", exerciseId, "competitors", c.id), {
             status: "ready",
           });
-          assignedReady++;
         }
-        if (!queue.length) break; // all READYUP slots for this type filled
+        if (!queue.length) break;
       }
     }
 
-    if (assignedNow + assignedReady === 0) {
-      toast.error("No lanes could be filled");
-      return;
-    }
+    const total = lanePatches.length;
+    if (!total) return toast.error("No lanes could be filled");
+
+    // write history in the same batch (atomic)
+    const actionRef = doc(collection(db, "exercises", exerciseId, "actions"));
+    batch.set(actionRef, {
+      action: "autofill",
+      createdAt: serverTimestamp(),
+      createdBy: null, // or your user id
+      lanes: lanePatches,
+      competitors: compPatches,
+      undone: false,
+    } satisfies ActionHistory);
 
     try {
       await batch.commit();
-      toast.success(
-        `Filled ${assignedNow} NOW and ${assignedReady} READY UP slots`
-      );
+      toast.success(`Auto-filled: ${total} updates saved (undo available)`);
     } catch (err) {
       console.error("Auto-fill failed", err);
       toast.error("Error filling lanes");
@@ -322,50 +396,81 @@ export default function CompetitionPage() {
     }
   };
 
+  /** Next round with history: NOW -> done, READYUP -> NOW */
   const clearAllLanes = async () => {
     if (!exerciseId) return;
-    const batch: Promise<void>[] = [];
+
+    const batch = writeBatch(db);
+    const lanePatches: LanePatch[] = [];
+    const compPatches: CompetitorPatch[] = [];
+
+    let affected = 0;
 
     for (const lane of lanes) {
       if (!lane.laneDocId) continue;
 
-      const laneUpdates: any = { competitor: null, readyUp: null };
+      const before = {
+        competitor: lane.competitor ?? null,
+        readyUp: lane.readyUp ?? null,
+      };
+      const after = {
+        competitor: lane.readyUp ? { ...lane.readyUp } : null,
+        readyUp: null,
+      };
 
+      // competitor status changes
       if (lane.competitor) {
-        batch.push(
-          updateDoc(
-            doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
-            { status: "done", order: Date.now() }
-          ) as unknown as Promise<void>
+        compPatches.push({
+          competitorId: lane.competitor.id,
+          beforeStatus: "lane",
+          afterStatus: "done",
+        });
+        batch.update(
+          doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
+          { status: "done", order: Date.now() }
         );
       }
-
       if (lane.readyUp) {
-        laneUpdates.competitor = { ...lane.readyUp };
-        batch.push(
-          updateDoc(
-            doc(db, "exercises", exerciseId, "competitors", lane.readyUp.id),
-            { status: "lane" }
-          ) as unknown as Promise<void>
+        compPatches.push({
+          competitorId: lane.readyUp.id,
+          beforeStatus: "ready",
+          afterStatus: "lane",
+        });
+        batch.update(
+          doc(db, "exercises", exerciseId, "competitors", lane.readyUp.id),
+          { status: "lane" }
         );
       }
 
-      batch.push(
-        updateDoc(
-          doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
-          laneUpdates
-        ) as unknown as Promise<void>
+      // lane update
+      batch.update(
+        doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
+        after
       );
+      lanePatches.push({
+        laneDocId: lane.laneDocId,
+        laneId: lane.id,
+        before,
+        after,
+      });
+      affected++;
     }
 
-    if (!batch.length) {
-      toast.error("No lanes to update");
-      return;
-    }
+    if (!affected) return toast.error("No lanes to update");
+
+    const actionRef = doc(collection(db, "exercises", exerciseId, "actions"));
+    batch.set(actionRef, {
+      action: "nextRound",
+      createdAt: serverTimestamp(),
+      createdBy: null,
+      lanes: lanePatches,
+      competitors: compPatches,
+      undone: false,
+    } satisfies ActionHistory);
 
     try {
-      await Promise.all(batch);
-      toast.success("Next round started");
+      await batch.commit();
+      toast.success("Next round started (undo available)");
     } catch (err) {
       console.error("Next round failed", err);
       toast.error("Error starting next round");
