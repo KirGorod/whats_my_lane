@@ -23,6 +23,17 @@ import { LANE_TYPES_BY_EXERCISE } from "../../../config/laneTypesByExercise";
 import { LANE_TYPES } from "../../../types/lane";
 import type { ActionHistory } from "../../../types/history";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../../../components/ui/alert-dialog";
 
 interface Props {
   lanes: LaneModel[];
@@ -52,6 +63,7 @@ export default function Lanes({
 }: Props) {
   const { isAdmin } = useAuth();
   const [exerciseType, setExerciseType] = useState<ExerciseType>("bench");
+  const [undoBusy, setUndoBusy] = useState(false);
 
   // Live exercise type (normalized)
   useEffect(() => {
@@ -189,15 +201,48 @@ export default function Lanes({
             >
               <span className="font-bold">+</span> Lane
             </Button>
-            <Button
-              onClick={undoLastAction}
-              size="sm"
-              variant="outline"
-              className="flex-1"
-            >
-              <RotateCcw />
-              Undo
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  // keep enabled; your undoLastAction already handles "Nothing to undo"
+                >
+                  <RotateCcw className="mr-1 h-4 w-4" />
+                  Undo
+                </Button>
+              </AlertDialogTrigger>
+
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Undo last action?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will revert the last change (Auto Fill, Next Round, or
+                    single-lane update). Proceed?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={undoBusy}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={undoBusy}
+                    onClick={async () => {
+                      try {
+                        setUndoBusy(true);
+                        await undoLastAction();
+                      } finally {
+                        setUndoBusy(false);
+                      }
+                    }}
+                  >
+                    {undoBusy ? "Undoing..." : "Yes, undo"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         )}
       </div>
