@@ -20,6 +20,7 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import {
   Tabs,
@@ -28,7 +29,11 @@ import {
   TabsTrigger,
 } from "../../components/ui/tabs";
 import { CheckCircle, Flag, Users } from "lucide-react";
-import { isCategoryAllowedForLane } from "../../utils/laneRules";
+import {
+  getAllowedCategoriesForLane,
+  isCategoryAllowedForLane,
+} from "../../utils/laneRules";
+import { groupLanesByType, makeWaitingByCategory } from "../../utils/laneUtils";
 
 const normalizeExerciseType = (raw: any): ExerciseType => {
   const v = String(raw ?? "").toLowerCase();
@@ -174,78 +179,88 @@ export default function CompetitionPage() {
   const autoFillLanes = async () => {
     if (!exerciseId) return;
 
-    let remaining = [...waitingCompetitors];
-    if (!remaining.length) {
+    // Always use current waiting list (already ordered by orderRank asc by your query)
+    const waitingAll = competitors.filter((c) => c.status === "waiting");
+    if (!waitingAll.length) {
       toast.error("No available competitors to fill");
       return;
     }
 
-    const batch: Promise<void>[] = [];
+    // We'll do a single batch for NOW + READYUP
+    const batch = writeBatch(db);
+    let assignedNow = 0;
+    let assignedReady = 0;
 
-    // Step 1: Fill NOW
-    for (const lane of lanes) {
-      if (!lane.laneType || lane.competitor) continue;
-      const match = remaining.find((c) =>
-        isCategoryAllowedForLane(exerciseType, lane.laneType, c.category)
-      );
-      if (match) {
-        batch.push(
-          updateDoc(
+    // Shared mutable pool of waiting competitors by category
+    const waitingByCat = makeWaitingByCategory(waitingAll);
+
+    // ---- 1) Fill NOW (empty lanes) ----
+    const freeByType = groupLanesByType(lanes, (l) => !l.competitor);
+    for (const [laneType, freeLanes] of freeByType) {
+      const priority = getAllowedCategoriesForLane(exerciseType, laneType);
+      if (!priority.length) continue;
+
+      const queue = [...freeLanes]; // left→right by id
+      for (const cat of priority) {
+        while (queue.length) {
+          const c = waitingByCat.pop(cat);
+          if (!c) break; // go to next category
+          const lane = queue.shift()!;
+          batch.update(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
-              competitor: {
-                id: match.id,
-                name: match.name,
-                category: match.category,
-              },
+              competitor: { id: c.id, name: c.name, category: c.category },
             }
-          ) as unknown as Promise<void>
-        );
-        batch.push(
-          updateDoc(doc(db, "exercises", exerciseId, "competitors", match.id), {
+          );
+          batch.update(doc(db, "exercises", exerciseId, "competitors", c.id), {
             status: "lane",
-          }) as unknown as Promise<void>
-        );
-        remaining = remaining.filter((c) => c.id !== match.id);
+          });
+          assignedNow++;
+        }
+        if (!queue.length) break; // all NOW slots for this type filled
       }
     }
 
-    // Step 2: Fill READYUP
-    for (const lane of lanes) {
-      if (!lane.laneType || !lane.competitor || lane.readyUp) continue;
-      const match = remaining.find((c) =>
-        isCategoryAllowedForLane(exerciseType, lane.laneType, c.category)
-      );
-      if (match) {
-        batch.push(
-          updateDoc(
+    // ---- 2) Fill READYUP (lanes with NOW but no READYUP) ----
+    const needReadyByType = groupLanesByType(
+      lanes,
+      (l) => !!l.competitor && !l.readyUp
+    );
+    for (const [laneType, needReady] of needReadyByType) {
+      const priority = getAllowedCategoriesForLane(exerciseType, laneType);
+      if (!priority.length) continue;
+
+      const queue = [...needReady]; // left→right by id
+      for (const cat of priority) {
+        while (queue.length) {
+          const c = waitingByCat.pop(cat);
+          if (!c) break; // next category
+          const lane = queue.shift()!;
+          batch.update(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
-              readyUp: {
-                id: match.id,
-                name: match.name,
-                category: match.category,
-              },
+              readyUp: { id: c.id, name: c.name, category: c.category },
             }
-          ) as unknown as Promise<void>
-        );
-        batch.push(
-          updateDoc(doc(db, "exercises", exerciseId, "competitors", match.id), {
+          );
+          batch.update(doc(db, "exercises", exerciseId, "competitors", c.id), {
             status: "ready",
-          }) as unknown as Promise<void>
-        );
-        remaining = remaining.filter((c) => c.id !== match.id);
+          });
+          assignedReady++;
+        }
+        if (!queue.length) break; // all READYUP slots for this type filled
       }
     }
 
-    if (!batch.length) {
+    if (assignedNow + assignedReady === 0) {
       toast.error("No lanes could be filled");
       return;
     }
 
     try {
-      await Promise.all(batch);
-      toast.success("Lanes filled successfully");
+      await batch.commit();
+      toast.success(
+        `Filled ${assignedNow} NOW and ${assignedReady} READY UP slots`
+      );
     } catch (err) {
       console.error("Auto-fill failed", err);
       toast.error("Error filling lanes");

@@ -18,8 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { Category } from "../../../types/category";
 import { Plus } from "lucide-react";
+import { COMPETITOR_CATEGORIES } from "../../../types/competitor";
 
 const AddCompetitorDialog = ({ addCompetitor }) => {
   const [open, setOpen] = useState(false);
@@ -49,7 +49,7 @@ const AddCompetitorDialog = ({ addCompetitor }) => {
           }}
         >
           <DialogHeader>
-            <DialogTitle>Add competition</DialogTitle>
+            <DialogTitle>Add competitor</DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-4">
@@ -70,7 +70,7 @@ const AddCompetitorDialog = ({ addCompetitor }) => {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.values(Category).map((cat) => (
+                  {COMPETITOR_CATEGORIES.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
                     </SelectItem>
