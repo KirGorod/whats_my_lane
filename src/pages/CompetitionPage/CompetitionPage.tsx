@@ -21,6 +21,7 @@ import {
   doc,
   serverTimestamp,
   writeBatch,
+  runTransaction,
 } from "firebase/firestore";
 import {
   Tabs,
@@ -34,6 +35,11 @@ import {
   isCategoryAllowedForLane,
 } from "../../utils/laneRules";
 import { groupLanesByType, makeWaitingByCategory } from "../../utils/laneUtils";
+import type {
+  ActionHistory,
+  CompetitorPatch,
+  LanePatch,
+} from "../../types/history";
 
 const normalizeExerciseType = (raw: any): ExerciseType => {
   const v = String(raw ?? "").toLowerCase();
@@ -199,10 +205,36 @@ export default function CompetitionPage() {
   const removeCompetitor = async (competitor: Competitor) => {
     if (!exerciseId) return;
     try {
-      await updateDoc(
+      const batch = writeBatch(db);
+
+      const compPatch: CompetitorPatch = {
+        competitorId: competitor.id,
+        beforeStatus: competitor.status,
+        afterStatus: "done",
+      };
+
+      // status -> done
+      batch.update(
         doc(db, "exercises", exerciseId, "competitors", competitor.id),
-        { status: "done", order: Date.now() }
+        {
+          status: "done",
+          order: Date.now(),
+        }
       );
+
+      // history
+      const actionRef = doc(collection(db, "exercises", exerciseId, "actions"));
+      const action: ActionHistory = {
+        action: "removeCompetitor",
+        createdAt: serverTimestamp(),
+        createdBy: null,
+        lanes: [], // no lane change
+        competitors: [compPatch],
+        undone: false,
+      };
+      batch.set(actionRef, action);
+
+      await batch.commit();
       toast.success(`Competitor ${competitor.name} removed.`);
     } catch (err) {
       console.error(err);
@@ -326,7 +358,7 @@ export default function CompetitionPage() {
     batch.set(actionRef, {
       action: "autofill",
       createdAt: serverTimestamp(),
-      createdBy: null, // or your user id
+      createdBy: null,
       lanes: lanePatches,
       competitors: compPatches,
       undone: false,
@@ -344,54 +376,80 @@ export default function CompetitionPage() {
   const clearLane = async (laneId: number) => {
     if (!exerciseId) return;
     const lane = lanes.find((l) => l.id === laneId);
-    if (!lane || !lane.laneDocId) {
-      toast.error("Lane not found");
-      return;
-    }
-
-    const updates: any = {};
-
-    // NOW -> done
-    if (lane.competitor) {
-      try {
-        await updateDoc(
-          doc(db, "exercises", exerciseId, "competitors", lane.competitor.id),
-          { status: "done", order: Date.now() }
-        );
-      } catch (err) {
-        console.error("Failed to mark competitor as done", err);
-        toast.error("Failed to mark current competitor as done");
-        return;
-      }
-    }
-
-    // READYUP -> NOW or clear
-    if (lane.readyUp) {
-      updates.competitor = { ...lane.readyUp };
-      updates.readyUp = null;
-      try {
-        await updateDoc(
-          doc(db, "exercises", exerciseId, "competitors", lane.readyUp.id),
-          { status: "lane" }
-        );
-      } catch (err) {
-        console.error("Failed to update ready competitor", err);
-        toast.error("Failed to move next competitor into lane");
-        return;
-      }
-    } else {
-      updates.competitor = null;
-      updates.readyUp = null;
-    }
+    if (!lane || !lane.laneDocId) return toast.error("Lane not found");
 
     try {
-      await updateDoc(
-        doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
-        updates
-      );
+      await runTransaction(db, async (tx) => {
+        const lref = doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!);
+        const ls = await tx.get(lref);
+        if (!ls.exists()) throw new Error("Lane disappeared");
+        const data = ls.data() as any;
+
+        const before = {
+          competitor: data.competitor ?? null,
+          readyUp: data.readyUp ?? null,
+        };
+
+        const lanePatches: LanePatch[] = [];
+        const compPatches: CompetitorPatch[] = [];
+
+        // NOW -> done
+        if (data.competitor?.id) {
+          compPatches.push({
+            competitorId: data.competitor.id,
+            beforeStatus: "lane",
+            afterStatus: "done",
+          });
+          tx.update(
+            doc(db, "exercises", exerciseId, "competitors", data.competitor.id),
+            { status: "done", order: Date.now() }
+          );
+        }
+
+        // READYUP -> NOW (if exists)
+        let after: { competitor: any; readyUp: any } = {
+          competitor: null,
+          readyUp: null,
+        };
+        if (data.readyUp) {
+          after = { competitor: { ...data.readyUp }, readyUp: null };
+          compPatches.push({
+            competitorId: data.readyUp.id,
+            beforeStatus: "ready",
+            afterStatus: "lane",
+          });
+          tx.update(
+            doc(db, "exercises", exerciseId, "competitors", data.readyUp.id),
+            { status: "lane" }
+          );
+        }
+
+        tx.update(lref, after);
+
+        lanePatches.push({
+          laneDocId: lane.laneDocId!,
+          laneId: lane.id,
+          before,
+          after,
+        });
+
+        // history doc inside the same tx
+        const actionRef = doc(
+          collection(db, "exercises", exerciseId, "actions")
+        );
+        tx.set(actionRef, {
+          action: "clearLane",
+          createdAt: serverTimestamp(),
+          createdBy: null,
+          lanes: lanePatches,
+          competitors: compPatches,
+          undone: false,
+        } as ActionHistory);
+      });
+
       toast.success("Lane cleared");
     } catch (err) {
-      console.error("Failed to update lane", err);
+      console.error("Failed to clear lane", err);
       toast.error("Error updating lane");
     }
   };
@@ -476,11 +534,10 @@ export default function CompetitionPage() {
       toast.error("Error starting next round");
     }
   };
-
   const fillLaneWithCompetitor = async (competitor: Competitor) => {
     if (!exerciseId) return;
 
-    // Try NOW
+    // pick target lane from current snapshot
     const nowLane = lanes.find(
       (lane) =>
         lane.laneType &&
@@ -491,69 +548,124 @@ export default function CompetitionPage() {
           competitor.category
         )
     );
-    if (nowLane) {
-      try {
-        await updateDoc(
-          doc(db, "exercises", exerciseId, "lanes", nowLane.laneDocId!),
-          {
-            competitor: {
-              id: competitor.id,
-              name: competitor.name,
-              category: competitor.category,
-            },
-          }
-        );
-        await updateDoc(
-          doc(db, "exercises", exerciseId, "competitors", competitor.id),
-          { status: "lane" }
-        );
-        toast.success(`${competitor.name} assigned to lane ${nowLane.id}`);
-        return;
-      } catch (err) {
-        console.error(err);
-        toast.error("Error assigning to lane");
-        return;
-      }
-    }
 
-    // Try READYUP
-    const readyLane = lanes.find(
-      (lane) =>
-        lane.laneType &&
-        lane.competitor &&
-        !lane.readyUp &&
-        isCategoryAllowedForLane(
-          exerciseType,
-          lane.laneType,
-          competitor.category
+    const readyLane = !nowLane
+      ? lanes.find(
+          (lane) =>
+            lane.laneType &&
+            lane.competitor &&
+            !lane.readyUp &&
+            isCategoryAllowedForLane(
+              exerciseType,
+              lane.laneType,
+              competitor.category
+            )
         )
-    );
-    if (readyLane) {
-      try {
-        await updateDoc(
-          doc(db, "exercises", exerciseId, "lanes", readyLane.laneDocId!),
-          {
-            readyUp: {
-              id: competitor.id,
-              name: competitor.name,
-              category: competitor.category,
-            },
-          }
-        );
-        await updateDoc(
-          doc(db, "exercises", exerciseId, "competitors", competitor.id),
-          { status: "ready" }
-        );
-        toast.success(`${competitor.name} queued for lane ${readyLane.id}`);
-        return;
-      } catch (err) {
-        console.error(err);
-        toast.error("Error assigning to ready slot");
-        return;
-      }
+      : null;
+
+    const target = nowLane ?? readyLane;
+    const mode: "now" | "ready" | null = nowLane
+      ? "now"
+      : readyLane
+      ? "ready"
+      : null;
+
+    if (!target || !mode) {
+      toast.error(`No compatible lane available for "${competitor.category}"`);
+      return;
     }
 
-    toast.error(`No compatible lane available for "${competitor.category}"`);
+    try {
+      await runTransaction(db, async (tx) => {
+        const lref = doc(
+          db,
+          "exercises",
+          exerciseId,
+          "lanes",
+          target.laneDocId!
+        );
+        const cref = doc(
+          db,
+          "exercises",
+          exerciseId,
+          "competitors",
+          competitor.id
+        );
+
+        const [ls, cs] = await Promise.all([tx.get(lref), tx.get(cref)]);
+        if (!ls.exists() || !cs.exists())
+          throw new Error("Lane or competitor disappeared");
+        const data = ls.data() as any;
+
+        // verify slot still free
+        if (mode === "now" && data.competitor)
+          throw new Error("NOW slot already taken");
+        if (mode === "ready" && (!data.competitor || data.readyUp))
+          throw new Error("READYUP slot not available");
+
+        const before = {
+          competitor: data.competitor ?? null,
+          readyUp: data.readyUp ?? null,
+        };
+        const after =
+          mode === "now"
+            ? {
+                competitor: {
+                  id: competitor.id,
+                  name: competitor.name,
+                  category: competitor.category,
+                },
+                readyUp: data.readyUp ?? null,
+              }
+            : {
+                competitor: data.competitor ?? null,
+                readyUp: {
+                  id: competitor.id,
+                  name: competitor.name,
+                  category: competitor.category,
+                },
+              };
+
+        // lane + competitor status
+        tx.update(lref, after);
+        tx.update(cref, { status: mode === "now" ? "lane" : "ready" });
+
+        // history
+        const actionRef = doc(
+          collection(db, "exercises", exerciseId, "actions")
+        );
+        tx.set(actionRef, {
+          action: "fillLane",
+          createdAt: serverTimestamp(),
+          createdBy: null,
+          lanes: [
+            {
+              laneDocId: target.laneDocId!,
+              laneId: target.id,
+              before,
+              after,
+            } as LanePatch,
+          ],
+          competitors: [
+            {
+              competitorId: competitor.id,
+              beforeStatus: (cs.data() as any).status,
+              afterStatus: mode === "now" ? "lane" : "ready",
+            } as CompetitorPatch,
+          ],
+          undone: false,
+        } as ActionHistory);
+      });
+
+      toast.success(
+        mode === "now"
+          ? `${competitor.name} assigned to lane ${target.id}`
+          : `${competitor.name} queued for lane ${target.id}`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Error assigning competitor");
+    }
   };
 
   const returnDoneCompetitorToLane = async (competitor: Competitor) => {
@@ -577,22 +689,74 @@ export default function CompetitionPage() {
     }
 
     try {
-      await Promise.all([
-        updateDoc(
-          doc(db, "exercises", exerciseId, "lanes", availableLane.laneDocId!),
-          {
-            competitor: {
-              id: competitor.id,
-              name: competitor.name,
-              category: competitor.category,
-            },
-          }
-        ) as unknown as Promise<void>,
-        updateDoc(
-          doc(db, "exercises", exerciseId, "competitors", competitor.id),
-          { status: "lane" }
-        ) as unknown as Promise<void>,
-      ]);
+      await runTransaction(db, async (tx) => {
+        const lref = doc(
+          db,
+          "exercises",
+          exerciseId,
+          "lanes",
+          availableLane.laneDocId!
+        );
+        const cref = doc(
+          db,
+          "exercises",
+          exerciseId,
+          "competitors",
+          competitor.id
+        );
+
+        const [ls, cs] = await Promise.all([tx.get(lref), tx.get(cref)]);
+        if (!ls.exists() || !cs.exists())
+          throw new Error("Lane or competitor disappeared");
+        const data = ls.data() as any;
+
+        if (data.competitor || data.readyUp)
+          throw new Error("Lane is no longer free");
+
+        const before = {
+          competitor: data.competitor ?? null,
+          readyUp: data.readyUp ?? null,
+        };
+        const after = {
+          competitor: {
+            id: competitor.id,
+            name: competitor.name,
+            category: competitor.category,
+          },
+          readyUp: null,
+        };
+
+        // writes
+        tx.update(lref, after);
+        tx.update(cref, { status: "lane" });
+
+        // history
+        const actionRef = doc(
+          collection(db, "exercises", exerciseId, "actions")
+        );
+        tx.set(actionRef, {
+          action: "returnDone",
+          createdAt: serverTimestamp(),
+          createdBy: null,
+          lanes: [
+            {
+              laneDocId: availableLane.laneDocId!,
+              laneId: availableLane.id,
+              before,
+              after,
+            } as LanePatch,
+          ],
+          competitors: [
+            {
+              competitorId: competitor.id,
+              beforeStatus: (cs.data() as any).status,
+              afterStatus: "lane",
+            } as CompetitorPatch,
+          ],
+          undone: false,
+        } as ActionHistory);
+      });
+
       toast.success(`${competitor.name} assigned to lane ${availableLane.id}`);
     } catch (err) {
       console.error("Failed to return competitor", err);

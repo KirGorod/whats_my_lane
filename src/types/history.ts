@@ -1,7 +1,13 @@
 import type { LaneModel } from "./lane";
 import type { Competitor } from "./competitor";
 
-export type ActionKind = "autofill" | "nextRound";
+export type ActionKind =
+  | "autofill"
+  | "nextRound"
+  | "removeCompetitor"
+  | "clearLane"
+  | "fillLane"
+  | "returnDone";
 
 export interface LanePatch {
   laneDocId: string;
