@@ -124,14 +124,14 @@ export default function Lane({
       {/* Content */}
       <CardContent className="space-y-3 flex-grow">
         {/* Now */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
+        <div className="bg-green-200 border border-green-400 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
           <div className="flex items-center gap-2">
             <Play className="w-4 h-4 text-green-600" />
             <span className="text-sm font-medium text-green-800">Now</span>
           </div>
           {lane.competitor ? (
             <div className="flex flex-col leading-tight">
-              <div className="font-medium text-green-900 whitespace-pre-line">
+              <div className="text-4xl text-green-900 whitespace-pre-line">
                 {lane.competitor.name}
               </div>
               <div className="text-xs text-green-700">
@@ -144,7 +144,7 @@ export default function Lane({
         </div>
 
         {/* Ready Up */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
+        <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-yellow-600" />
             <span className="text-sm font-medium text-yellow-800">
@@ -153,7 +153,7 @@ export default function Lane({
           </div>
           {lane.readyUp ? (
             <div className="flex flex-col leading-tight">
-              <div className="font-medium text-yellow-900 whitespace-pre-line">
+              <div className="text-3xl text-yellow-900 whitespace-pre-line">
                 {lane.readyUp.name}
               </div>
               <div className="text-xs text-yellow-700">
