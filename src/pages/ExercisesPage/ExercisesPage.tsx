@@ -15,8 +15,10 @@ import {
 import { toast } from "sonner";
 import ExerciseCard from "./components/ExerciseCard";
 import { useAuth } from "../../context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 const ExercisesPage = () => {
+  const { t } = useTranslation();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const { isAdmin } = useAuth();
@@ -70,7 +72,7 @@ const ExercisesPage = () => {
           <div>
             {/* Header */}
             <h1 className="text-3xl font-bold text-center text-gray-900">
-              Exercises
+              {t("exercises")}
             </h1>
 
             {/* Add button centered under header */}
