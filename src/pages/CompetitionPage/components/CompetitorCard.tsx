@@ -39,7 +39,7 @@ export default function CompetitorCard({
               #{displayNumber}
             </span>
           ) : null}
-          <div className="font-medium text-gray-900 truncate">
+          <div className="font-medium text-gray-900 whitespace-normal">
             {competitor.name}
           </div>
         </div>

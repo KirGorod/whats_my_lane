@@ -789,7 +789,7 @@ export default function CompetitionPage() {
       />
 
       {/* Desktop */}
-      <div className="hidden lg:flex">
+      <div className="hidden xl:flex">
         <div className="w-1/5 border-r border-gray-200 bg-white">
           <CompetitorsList
             exerciseId={exerciseId}
@@ -819,7 +819,7 @@ export default function CompetitionPage() {
       </div>
 
       {/* Mobile/Tablet */}
-      <div className="lg:hidden h-[calc(100vh-80px)] bg-white">
+      <div className="xl:hidden h-[calc(100vh-80px)] bg-white">
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}

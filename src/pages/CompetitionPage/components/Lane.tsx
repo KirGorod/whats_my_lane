@@ -142,7 +142,7 @@ export default function Lane({
           </div>
           {lane.competitor ? (
             <div className="flex flex-col leading-tight">
-              <div className="text-4xl text-green-900 whitespace-pre-line">
+              <div className="text-2xl md:text-3xl lg:text-4xl text-green-900 whitespace-pre-line">
                 {lane.competitor.name}
               </div>
               <div className="text-xs text-green-700">
@@ -166,7 +166,7 @@ export default function Lane({
           </div>
           {lane.readyUp ? (
             <div className="flex flex-col leading-tight">
-              <div className="text-3xl text-yellow-900 whitespace-pre-line">
+              <div className="text-xl md:text-2xl lg:text-3xl text-yellow-900 whitespace-pre-line">
                 {lane.readyUp.name}
               </div>
               <div className="text-xs text-yellow-700">
