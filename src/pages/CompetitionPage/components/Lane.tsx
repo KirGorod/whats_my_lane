@@ -112,7 +112,11 @@ export default function Lane({
               </Select>
             ) : (
               <Badge className={badgeClass(lane.laneType)}>
-                {lane.laneType ? t(lane.laneType) : "—"}
+                {lane.laneType
+                  ? t(`laneTypeSelect.${lane.laneType}`, {
+                      defaultValue: t(lane.laneType),
+                    })
+                  : "—"}
               </Badge>
             )}
           </div>
