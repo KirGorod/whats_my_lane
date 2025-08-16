@@ -41,6 +41,7 @@ import type {
   LanePatch,
 } from "../../types/history";
 import { useTranslation } from "react-i18next";
+import ScrollToTopButton from "../../components/main/ScrollToTopButton";
 
 const normalizeExerciseType = (raw: any): ExerciseType => {
   const v = String(raw ?? "").toLowerCase();
@@ -885,6 +886,7 @@ export default function CompetitionPage() {
           </TabsContent>
         </Tabs>
       </div>
+      <ScrollToTopButton />
     </div>
   );
 }

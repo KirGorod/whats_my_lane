@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import ExerciseCard from "./components/ExerciseCard";
 import { useAuth } from "../../context/AuthContext";
 import { useTranslation } from "react-i18next";
+import ScrollToTopButton from "../../components/main/ScrollToTopButton";
 
 const ExercisesPage = () => {
   const { t } = useTranslation();
@@ -117,6 +118,7 @@ const ExercisesPage = () => {
           </ul>
         )}
       </div>
+      <ScrollToTopButton />
     </div>
   );
 };
