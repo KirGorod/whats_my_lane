@@ -54,7 +54,12 @@ const normalizeExerciseType = (raw: any): ExerciseType => {
 
 export default function CompetitionPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState("competitors");
+  const [activeTab, setActiveTab] = useState<"competitors" | "lanes" | "done">(
+    () =>
+      typeof window !== "undefined" && window.innerWidth < 1024
+        ? "lanes"
+        : "competitors"
+  );
   const { exerciseId } = useParams<{ exerciseId: string }>();
 
   const [exerciseType, setExerciseType] = useState<ExerciseType>("bench");
