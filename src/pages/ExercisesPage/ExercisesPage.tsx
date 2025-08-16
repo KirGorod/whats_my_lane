@@ -25,29 +25,32 @@ const ExercisesPage = () => {
   const { isAdmin } = useAuth();
 
   useEffect(() => {
-    const q = query(collection(db, "exercises"));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const STATUS_ORDER = { ongoing: 0, planned: 1, finished: 2 } as const;
+    const STATUS_ORDER = { ongoing: 0, planned: 1, finished: 2 } as const;
 
-      const data = snapshot.docs
-        .map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Exercise, "id">),
-        }))
-        .sort((a, b) => {
-          const byStatus =
-            STATUS_ORDER[a.status as keyof typeof STATUS_ORDER] -
-            STATUS_ORDER[b.status as keyof typeof STATUS_ORDER];
-          if (byStatus !== 0) return byStatus;
-          // tie-breaker: earlier start first
-          return (
-            new Date(a.timeToStart).getTime() -
-            new Date(b.timeToStart).getTime()
-          );
-        });
+    const activeQ = query(
+      collection(db, "exercises"),
+      orderBy("status"),
+      orderBy("timeToStart")
+    );
 
-      setExercises(data);
+    const unsub = onSnapshot(activeQ, (snap) => {
+      const data = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Exercise, "id">),
+      }));
+      // stable sort if you kept client sort
+      const sorted = data.sort((a, b) => {
+        const byStatus =
+          STATUS_ORDER[a.status as keyof typeof STATUS_ORDER] -
+          STATUS_ORDER[b.status as keyof typeof STATUS_ORDER];
+        if (byStatus) return byStatus;
+        return (
+          new Date(a.timeToStart).getTime() - new Date(b.timeToStart).getTime()
+        );
+      });
+      setExercises(sorted);
     });
+
     return () => unsub();
   }, []);
 
