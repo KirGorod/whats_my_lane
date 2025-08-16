@@ -25,6 +25,7 @@ import { useEffect, useState } from "react";
 import { db } from "../../../firebase";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useAuth } from "../../../context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 function useCompetitorCounts(exerciseId: string) {
   const [total, setTotal] = useState(0);
@@ -56,6 +57,7 @@ type Props = {
 const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
   const { total, waiting } = useCompetitorCounts(exercise.id);
   const { isAdmin } = useAuth();
+  const { t } = useTranslation();
 
   const Title = (
     <CardTitle className="text-base sm:text-lg flex items-center gap-2 truncate group-hover:underline">
@@ -131,10 +133,13 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
               exercise.status
             )}`}
           >
-            {statusOptions.find((s) => s.value === exercise.status)?.label}
+            {t(
+              statusOptions.find((s) => s.value === exercise.status)?.label ??
+                ""
+            )}
           </span>
           <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-            {exercise.numberOfLanes} Lanes
+            {exercise.numberOfLanes} {t("LanesCount")}
           </span>
         </div>
       </CardHeader>
@@ -142,17 +147,27 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
       <CardContent className="p-4 pt-0">
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between">
-            <span className="font-medium text-gray-700">Time to Start</span>
+            <span className="font-medium text-gray-700">
+              {t("timeToStart")}
+            </span>
             <span className="text-gray-600">
-              {new Date(exercise.timeToStart).toLocaleString()}
+              {new Date(exercise.timeToStart).toLocaleTimeString("uk-UA", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })}
             </span>
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="font-medium text-gray-700">Competitors</span>
+            <span className="font-medium text-gray-700">
+              {t("competitors")}
+            </span>
             <span className="text-gray-600">
-              {total} {total === 1 ? "competitor" : "competitors"}
-              {typeof waiting === "number" ? ` (${waiting} waiting)` : ""}
+              {total} {total === 1 ? t("competitor") : t("competitorsCount")}
+              {typeof waiting === "number"
+                ? ` (${waiting} ${t("Waiting")})`
+                : ""}
             </span>
           </div>
         </div>

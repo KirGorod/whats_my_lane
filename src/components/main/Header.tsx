@@ -40,7 +40,7 @@ const Header = () => {
           <Link to="/" className="flex flex-row gap-4">
             <img src={Logo} alt="Logo" className="h-8 w-auto" />
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-              Trenvet Lane Manager
+              Trenvet Order
             </h1>
           </Link>
         </div>

@@ -26,8 +26,11 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 const AddExercise = ({ editingExercise, setEditingExercise }) => {
+  const { t } = useTranslation();
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const [formData, setFormData] = useState<Omit<Exercise, "id">>({
@@ -104,19 +107,19 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
           }}
         >
           <Plus className="w-4 h-4 mr-2" />
-          Add Exercise
+          {t("AddExercise")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {editingExercise ? "Edit Exercise" : "Add New Exercise"}
+            {editingExercise ? t("EditExercise") : t("AddNewExercise")}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Name */}
           <div>
-            <Label htmlFor="name">Exercise Name *</Label>
+            <Label htmlFor="name">{t("ExerciseName")}</Label>
             <Input
               id="name"
               value={formData.name}
@@ -129,7 +132,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
 
           {/* Status */}
           <div>
-            <Label htmlFor="status">Exercise Status *</Label>
+            <Label htmlFor="status">{t("ExerciseStatus")}</Label>
             <select
               id="status"
               value={formData.status}
@@ -144,7 +147,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
             >
               {statusOptions.map((s) => (
                 <option key={s.value} value={s.value}>
-                  {s.label}
+                  {t(s.label)}
                 </option>
               ))}
             </select>
@@ -152,7 +155,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
 
           {/* Time */}
           <div>
-            <Label htmlFor="timeToStart">Time to Start *</Label>
+            <Label htmlFor="timeToStart">{t("TimeToStart")}</Label>
             <Input
               id="timeToStart"
               type="datetime-local"
@@ -169,7 +172,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
 
           {/* Lanes */}
           <div>
-            <Label htmlFor="numberOfLanes">Number of Lanes *</Label>
+            <Label htmlFor="numberOfLanes">{t("NumberOfLanes")}</Label>
             <Input
               id="numberOfLanes"
               type="number"
@@ -182,13 +185,13 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
                 }))
               }
               required
-              disabled={!!editingExercise} // disable when editing
+              disabled={!!editingExercise}
             />
           </div>
 
           {/* Type */}
           <div>
-            <Label htmlFor="type">Exercise Type *</Label>
+            <Label htmlFor="type">{t("ExerciseType")}</Label>
             <select
               id="type"
               value={formData.type}
@@ -201,9 +204,9 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
               required
             >
-              {exerciseTypes.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
+              {exerciseTypes.map((tOption) => (
+                <option key={tOption.value} value={tOption.value}>
+                  {t(tOption.value)}
                 </option>
               ))}
             </select>
@@ -219,10 +222,10 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
                 setEditingExercise(null);
               }}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button type="submit">
-              {editingExercise ? "Update Exercise" : "Add Exercise"}
+              {editingExercise ? t("UpdateExercise") : t("AddExercise")}
             </Button>
           </div>
         </form>

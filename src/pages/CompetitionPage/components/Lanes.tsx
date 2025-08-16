@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   lanes: LaneModel[];
@@ -61,6 +62,7 @@ export default function Lanes({
   clearAllLanes,
   exerciseId,
 }: Props) {
+  const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [exerciseType, setExerciseType] = useState<ExerciseType>("bench");
   const [undoBusy, setUndoBusy] = useState(false);
@@ -168,7 +170,7 @@ export default function Lanes({
         <div className="hidden lg:flex items-center gap-2 mb-4">
           <Flag className="w-5 h-5 text-gray-600" />
           <h2 className="text-lg font-semibold">
-            Lanes ({occupiedLanes}/{lanes.length})
+            {t("Lanes")} ({occupiedLanes}/{lanes.length})
           </h2>
         </div>
 
@@ -181,8 +183,9 @@ export default function Lanes({
               className="flex-1"
             >
               <Zap className="w-4 h-4 mr-1" />
-              Auto Fill
+              {t("AutoFill")}
             </Button>
+
             <Button
               onClick={clearAllLanes}
               size="sm"
@@ -191,41 +194,39 @@ export default function Lanes({
               disabled={occupiedLanes === 0}
             >
               <ArrowBigRightDash />
-              Next Round
+              {t("NextRound")}
             </Button>
+
             <Button
               onClick={addLane}
               size="sm"
               variant="secondary"
               className="flex-1"
             >
-              <span className="font-bold">+</span> Lane
+              <span className="font-bold">+</span> {t("Lane")}
             </Button>
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1"
-                  // keep enabled; your undoLastAction already handles "Nothing to undo"
-                >
+                <Button size="sm" variant="outline" className="flex-1">
                   <RotateCcw className="mr-1 h-4 w-4" />
-                  Undo
+                  {t("Undo")}
                 </Button>
               </AlertDialogTrigger>
 
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Undo last action?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    {t("UndoLastActionQuestion")}
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will revert the last change (Auto Fill, Next Round, or
-                    single-lane update). Proceed?
+                    {t("UndoDescription")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
 
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={undoBusy}>
-                    Cancel
+                    {t("Cancel")}
                   </AlertDialogCancel>
                   <AlertDialogAction
                     disabled={undoBusy}
@@ -238,7 +239,7 @@ export default function Lanes({
                       }
                     }}
                   >
-                    {undoBusy ? "Undoing..." : "Yes, undo"}
+                    {undoBusy ? t("Undoing") : t("YesUndo")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -255,7 +256,7 @@ export default function Lanes({
             lane={lane}
             exerciseId={exerciseId}
             clearLane={clearLane}
-            laneTypeOptions={laneTypeOptions} // never empty now
+            laneTypeOptions={laneTypeOptions}
             exerciseType={exerciseType}
           />
         ))}

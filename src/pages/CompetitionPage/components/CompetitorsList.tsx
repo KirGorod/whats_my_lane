@@ -28,6 +28,7 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useTranslation } from "react-i18next";
 
 type Competitor = {
   id: string;
@@ -91,6 +92,7 @@ const CompetitorsList = ({
   addCompetitor: (c: Omit<Competitor, "id">) => void;
   fillLaneWithCompetitor: (c: Competitor) => void;
 }) => {
+  const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -181,7 +183,7 @@ const CompetitorsList = ({
         <div className="hidden lg:flex items-center gap-2">
           <Users className="w-5 h-5 text-gray-600" />
           <h2 className="text-lg font-semibold">
-            Competitors ({competitors.length})
+            {t("Competitors")} ({competitors.length})
           </h2>
         </div>
 
@@ -206,7 +208,7 @@ const CompetitorsList = ({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
-            placeholder="Search competitors..."
+            placeholder={t("SearchCompetitors")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9"
@@ -215,7 +217,7 @@ const CompetitorsList = ({
         {isAdmin && searchTerm && (
           <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
-            Drag-and-drop disabled while searching — clear search to reorder.
+            {t("DragDropDisabled")}
           </div>
         )}
       </div>
@@ -224,9 +226,7 @@ const CompetitorsList = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {filteredCompetitors.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
-            {searchTerm
-              ? "No competitors match your search"
-              : "No competitors available"}
+            {searchTerm ? t("NoCompetitorsMatch") : t("NoCompetitorsAvailable")}
           </div>
         ) : (
           <DndContext
@@ -236,7 +236,7 @@ const CompetitorsList = ({
             modifiers={[restrictToVerticalAxis]}
           >
             <SortableContext
-              items={filteredIds} // ← match rendered items
+              items={filteredIds}
               strategy={verticalListSortingStrategy}
             >
               {filteredCompetitors.map((competitor, index) => (

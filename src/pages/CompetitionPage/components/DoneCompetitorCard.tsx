@@ -3,6 +3,7 @@ import { Button } from "../../../components/ui/button";
 import { useAuth } from "../../../context/AuthContext";
 import { getBadgeColor } from "../../../utils/getBadgeColor";
 import { Badge } from "../../../components/ui/badge";
+import { useTranslation } from "react-i18next";
 
 const DoneCompetitorCard = ({
   competitor,
@@ -10,6 +11,7 @@ const DoneCompetitorCard = ({
   doneCompetitors,
   returnDoneCompetitorToLane,
 }) => {
+  const { t } = useTranslation();
   const { isAdmin } = useAuth();
 
   return (
@@ -26,7 +28,7 @@ const DoneCompetitorCard = ({
         </div>
 
         <Badge className={getBadgeColor(competitor.category)}>
-          {competitor.category}
+          {t(competitor.category)}
         </Badge>
       </div>
 
@@ -37,6 +39,7 @@ const DoneCompetitorCard = ({
               onClick={() => returnDoneCompetitorToLane(competitor)}
               variant="ghost"
               size="icon"
+              aria-label={`${t("ReturnToLane")} ${competitor.name}`}
               className="text-blue-500 hover:text-blue-700"
             >
               <ArrowBigLeft />

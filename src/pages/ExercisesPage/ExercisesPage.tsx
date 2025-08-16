@@ -87,7 +87,7 @@ const ExercisesPage = () => {
           <div>
             {/* Header */}
             <h1 className="text-3xl font-bold text-center text-gray-900 mb-5">
-              Exercises
+              {t("exercises")}
             </h1>
           </div>
         )}

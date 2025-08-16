@@ -40,6 +40,7 @@ import type {
   CompetitorPatch,
   LanePatch,
 } from "../../types/history";
+import { useTranslation } from "react-i18next";
 
 const normalizeExerciseType = (raw: any): ExerciseType => {
   const v = String(raw ?? "").toLowerCase();
@@ -52,6 +53,7 @@ const normalizeExerciseType = (raw: any): ExerciseType => {
 };
 
 export default function CompetitionPage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("competitors");
   const { exerciseId } = useParams<{ exerciseId: string }>();
 
@@ -824,25 +826,27 @@ export default function CompetitionPage() {
                 className="flex items-center gap-1 sm:gap-2"
               >
                 <Users className="w-4 h-4" />
-                <span className="hidden sm:inline">Competitors</span>
+                <span className="hidden sm:inline">{t("competitors")}</span>
                 <span>({competitors.length})</span>
               </TabsTrigger>
+
               <TabsTrigger
                 value="lanes"
                 className="flex items-center gap-1 sm:gap-2"
               >
                 <Flag className="w-4 h-4" />
-                <span className="hidden sm:inline">Lanes</span>
+                <span className="hidden sm:inline">{t("Lanes")}</span>
                 <span>
                   ({activeLanesCount}/{lanes.length})
                 </span>
               </TabsTrigger>
+
               <TabsTrigger
                 value="done"
                 className="flex items-center gap-1 sm:gap-2"
               >
                 <CheckCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">Done</span>
+                <span className="hidden sm:inline">{t("Done")}</span>
                 <span>({doneCompetitors.length})</span>
               </TabsTrigger>
             </TabsList>

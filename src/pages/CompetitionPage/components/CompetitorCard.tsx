@@ -3,6 +3,7 @@ import { Button } from "../../../components/ui/button";
 import { useAuth } from "../../../context/AuthContext";
 import { getBadgeColor } from "../../../utils/getBadgeColor";
 import { Badge } from "../../../components/ui/badge";
+import { useTranslation } from "react-i18next";
 
 type Competitor = {
   id: string;
@@ -21,6 +22,7 @@ export default function CompetitorCard({
   fillLaneWithCompetitor: (c: Competitor) => void;
   removeCompetitor: (c: Competitor) => void;
 }) {
+  const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const displayNumber =
     typeof position === "number" ? position : competitor.orderRank;
@@ -43,7 +45,7 @@ export default function CompetitorCard({
         </div>
 
         <Badge className={getBadgeColor(competitor.category)}>
-          {competitor.category}
+          {t(competitor.category)}
         </Badge>
       </div>
 
@@ -55,7 +57,7 @@ export default function CompetitorCard({
               variant="ghost"
               size="icon"
               className="text-red-500 hover:text-red-700"
-              aria-label={`Remove ${competitor.name}`}
+              aria-label={`${t("Remove")} ${competitor.name}`}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -64,7 +66,7 @@ export default function CompetitorCard({
               variant="ghost"
               size="icon"
               className="text-blue-500 hover:text-blue-700"
-              aria-label={`Send ${competitor.name} to lane`}
+              aria-label={`${t("SendToLane")} ${competitor.name}`}
             >
               <ArrowBigRight className="w-5 h-5" />
             </Button>

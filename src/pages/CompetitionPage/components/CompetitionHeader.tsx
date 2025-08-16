@@ -9,6 +9,7 @@ import { statusOptions } from "../../../types/exercise";
 import { CheckCircle2, PlayCircle, CalendarClock } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { statusBadgeClass } from "../../../utils/statusStyles";
+import { useTranslation } from "react-i18next";
 
 function statusIcon(s: ExerciseStatus) {
   switch (s) {
@@ -34,8 +35,9 @@ export default memo(function CompetitionHeader({
   status: ExerciseStatus;
   type?: ExerciseType;
 }) {
-  const [saving, setSaving] = useState(false);
+  const { t } = useTranslation();
   const { isAdmin } = useAuth();
+  const [saving, setSaving] = useState(false);
 
   const setStatus = async (next: ExerciseStatus) => {
     if (next === status) return;
@@ -56,16 +58,16 @@ export default memo(function CompetitionHeader({
       <div className="flex items-center justify-center gap-3">
         <div className="min-w-0 flex gap-3 items-center">
           <h1 className="text-xl sm:text-2xl font-semibold truncate">
-            {name ?? "Competition"}
+            {name ?? t("Competition")}
           </h1>
 
           <Badge className={`capitalize ${statusBadgeClass(status)}`}>
-            {statusIcon(status)} <span className="ml-1">{status}</span>
+            {statusIcon(status)} <span className="ml-1">{t(status)}</span>
           </Badge>
         </div>
       </div>
 
-      {/* Status selector (unstyled — default/outline only) */}
+      {/* Status selector */}
       {isAdmin && (
         <div className="flex gap-2 justify-center">
           {statusOptions.map(({ value, label }) => (
@@ -79,7 +81,7 @@ export default memo(function CompetitionHeader({
               aria-pressed={status === value}
             >
               {statusIcon(value as ExerciseStatus)}
-              <span className="ml-1">{label}</span>
+              <span className="ml-1">{t(label)}</span>
             </Button>
           ))}
         </div>
