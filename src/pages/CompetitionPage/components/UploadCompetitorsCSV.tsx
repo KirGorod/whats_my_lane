@@ -19,9 +19,21 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { Upload } from "lucide-react";
+import { COMPETITOR_CATEGORIES } from "../../../types/competitor";
 
-export default function UploadCompetitorsCSV({ exerciseId }) {
+type Row = { name?: string; category?: string };
+
+export default function UploadCompetitorsCSV({
+  exerciseId,
+}: {
+  exerciseId: string;
+}) {
   const [open, setOpen] = useState(false);
+
+  const normalizeCategory = (raw?: string) => {
+    if (!raw) return "";
+    return raw.trim().replace(/\s+/g, "").toLowerCase();
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -32,14 +44,13 @@ export default function UploadCompetitorsCSV({ exerciseId }) {
       return;
     }
 
+    const validSet = new Set(COMPETITOR_CATEGORIES.map((c) => c.toLowerCase()));
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
-        const parsedData = results.data as {
-          name?: string;
-          category?: string;
-        }[];
+        const parsedData = (results.data as Row[]) || [];
 
         const batch = writeBatch(db);
         const competitorsRef = collection(
@@ -49,28 +60,58 @@ export default function UploadCompetitorsCSV({ exerciseId }) {
           "competitors"
         );
 
-        let addedCount = 0;
+        const invalidRows: Array<{
+          index: number;
+          reason: string;
+          value?: string;
+        }> = [];
 
-        for (let i = 0; i < parsedData.length; i++) {
-          addedCount++;
-          const row = parsedData[i];
-          if (row.name && row.category) {
-            const newDocRef = doc(competitorsRef);
-            batch.set(newDocRef, {
-              name: row.name.trim(),
-              category: row.category.trim(),
-              lane: null,
-              status: "waiting",
-              orderRank: i, // 👈 replaces csvOrderIndex
-              createdAt: serverTimestamp(),
+        parsedData.forEach((row, index) => {
+          const rawName = row.name?.trim();
+          const rawCategory = row.category?.trim();
+
+          if (!rawName || !rawCategory) {
+            invalidRows.push({
+              index: index + 2,
+              reason: "Missing name or category",
             });
+            return;
           }
+
+          const normalized = normalizeCategory(rawCategory);
+
+          if (!validSet.has(normalized)) {
+            invalidRows.push({
+              index: index + 2,
+              reason: "Invalid category",
+              value: rawCategory,
+            });
+            return;
+          }
+
+          const newDocRef = doc(competitorsRef);
+          batch.set(newDocRef, {
+            name: rawName,
+            category: normalized,
+            lane: null,
+            status: "waiting",
+            orderRank: index,
+            createdAt: serverTimestamp(),
+          });
+        });
+
+        if (invalidRows.length > 0) {
+          console.error("CSV validation failed. Invalid rows:", invalidRows);
+          toast.error("CSV validation failed", {
+            description: `Found ${invalidRows.length} invalid row(s). Check console for details.`,
+          });
+          return; // ❌ do not commit anything
         }
 
         try {
           await batch.commit();
           toast.success(`CSV Uploaded`, {
-            description: `Successfully added ${addedCount} competitors.`,
+            description: `Successfully added ${parsedData.length} competitors.`,
           });
           setOpen(false);
         } catch (err) {
@@ -79,9 +120,7 @@ export default function UploadCompetitorsCSV({ exerciseId }) {
         }
       },
       error: (error) => {
-        toast.error(`Error parsing CSV`, {
-          description: error.message,
-        });
+        toast.error("Error parsing CSV", { description: error.message });
       },
     });
   };
@@ -105,7 +144,11 @@ export default function UploadCompetitorsCSV({ exerciseId }) {
 
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Please upload a CSV file with columns: <b>name</b>, <b>category</b>.
+            Upload a CSV with columns: <b>name</b>, <b>category</b>.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Allowed categories (case-insensitive):{" "}
+            {COMPETITOR_CATEGORIES.join(", ")}
           </p>
           <Input type="file" accept=".csv" onChange={handleFileUpload} />
         </div>
