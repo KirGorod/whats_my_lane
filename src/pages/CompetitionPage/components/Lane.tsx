@@ -16,6 +16,7 @@ import {
   Flag,
   Unlock,
   ShieldAlert,
+  ArrowRight,
 } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { toast } from "sonner";
@@ -50,23 +51,27 @@ export default function Lane({
   clearLane,
   laneTypeOptions,
   exerciseType,
-  isPending = false, // NEW
-  onDone, // NEW (wrapped clearLane from parent)
+  isPending = false,
+  onDone,
 }: {
   lane: LaneModel;
   exerciseId: string;
   clearLane: (laneId: number) => void;
   laneTypeOptions: LaneType[];
   exerciseType: ExerciseType;
-  isPending?: boolean; // NEW
-  onDone?: () => void; // NEW
+  isPending?: boolean;
+  onDone?: () => void;
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
 
   const removeLane = async (laneDocId: string) => {
     if (lane.competitor) {
-      toast.warning("Cannot remove lane while it has a competitor");
+      toast.warning(
+        t("CannotRemoveLaneWithCompetitor", {
+          defaultValue: "Cannot remove lane while it has a competitor",
+        })
+      );
       return;
     }
     try {
@@ -76,9 +81,14 @@ export default function Lane({
     }
   };
 
+  // change CURRENT lane type immediately (blocked if competitor present)
   const updateLaneType = async (laneDocId: string, newLaneType: LaneType) => {
     if (lane.competitor) {
-      toast.warning("Cannot change lane type when lane has a competitor");
+      toast.warning(
+        t("CannotChangeTypeWhenOccupied", {
+          defaultValue: "Cannot change lane type when lane has a competitor",
+        })
+      );
       return;
     }
     try {
@@ -88,6 +98,41 @@ export default function Lane({
       });
     } catch (err) {
       console.error("Error updating lane type", err);
+    }
+  };
+
+  // set NEXT-ROUND lane type (allowed even if occupied)
+  const updateNextLaneType = async (
+    laneDocId: string,
+    newLaneType: LaneType
+  ) => {
+    try {
+      await updateDoc(doc(db, "exercises", exerciseId, "lanes", laneDocId), {
+        nextLaneType: newLaneType,
+      });
+      toast.success(
+        t("NextRoundLaneTypeSet", {
+          defaultValue: "Next round lane type scheduled",
+        })
+      );
+    } catch (err) {
+      console.error("Error updating nextLaneType", err);
+      toast.error(t("Error"));
+    }
+  };
+
+  const clearNextLaneType = async () => {
+    try {
+      await updateDoc(
+        doc(db, "exercises", exerciseId, "lanes", lane.laneDocId as string),
+        {
+          nextLaneType: null,
+        }
+      );
+      toast.success(t("Cleared", { defaultValue: "Cleared" }));
+    } catch (e) {
+      console.error(e);
+      toast.error(t("Error"));
     }
   };
 
@@ -116,7 +161,7 @@ export default function Lane({
       aria-busy={isPending}
       aria-disabled={isPending}
     >
-      {/* 🔴 Locked overlay (existing) */}
+      {/* Locked overlay */}
       {lane.locked && (
         <div className="pointer-events-none absolute inset-0 bg-red-500/40 backdrop-brightness-95 flex flex-col items-center justify-center text-black z-10">
           <Lock className="w-16 h-16 mb-2" />
@@ -124,10 +169,9 @@ export default function Lane({
         </div>
       )}
 
-      {/* 🟡 Pending overlay to block interactions */}
+      {/* Busy overlay */}
       {isPending && (
         <div className="absolute inset-0 z-10 pointer-events-auto flex items-center justify-center">
-          {/* transparent blocker; optional spinner */}
           <div className="absolute inset-0 bg-white/20" />
           <div className="relative text-xs font-medium px-2 py-1 rounded bg-white/80 border">
             {t("Processing")}…
@@ -163,6 +207,7 @@ export default function Lane({
               </Button>
             )}
 
+            {/* CURRENT lane type (same as before) */}
             {isAdmin ? (
               <Select
                 disabled={
@@ -194,6 +239,59 @@ export default function Lane({
               </Badge>
             )}
           </div>
+        </div>
+
+        {/* NEXT ROUND type row */}
+        <div className="mt-2 flex items-center gap-2 justify-end">
+          {isAdmin ? (
+            <>
+              <Select
+                disabled={!laneTypeOptions.length || isPending}
+                value={lane.nextLaneType ?? ""}
+                onValueChange={(value) =>
+                  updateNextLaneType(
+                    lane.laneDocId as string,
+                    value as LaneType
+                  )
+                }
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue
+                    placeholder={t("SelectNextRoundType", {
+                      defaultValue: "Select next round type",
+                    })}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {laneTypeOptions.map((lt) => (
+                    <SelectItem key={lt} value={lt}>
+                      {t(`laneTypeSelect.${lt}`, { defaultValue: t(lt) })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {lane.nextLaneType && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={clearNextLaneType}
+                  disabled={isPending}
+                >
+                  {t("Reset", { defaultValue: "Reset" })}
+                </Button>
+              )}
+            </>
+          ) : lane.nextLaneType ? (
+            <Badge className="bg-amber-100 text-amber-800 border border-amber-200">
+              {t("Next")}:{" "}
+              {t(`laneTypeSelect.${lane.nextLaneType}`, {
+                defaultValue: t(lane.nextLaneType),
+              })}
+            </Badge>
+          ) : (
+            <span></span>
+          )}
         </div>
 
         {!!allowedCats.length && (

@@ -65,5 +65,17 @@
   "defaultRowing": "Default",
   "laneTypeSelect.jerk": "Jerk",
   "laneTypeSelect.bench": "Bench",
-  "LaneLocked": "Lane Locked"
+  "LaneLocked": "Lane Locked",
+  "SelectNextRoundType": "Select next round type",
+  "Next": "Next",
+  "NotSet": "Not set",
+  "Reset": "Reset",
+  "NextRoundLaneTypeSet": "Next round lane type scheduled",
+  "CannotRemoveLaneWithCompetitor": "Cannot remove lane while it has a competitor",
+  "CannotChangeTypeWhenOccupied": "Cannot change lane type when lane has a competitor",
+  "LaneCleared": "Lane cleared",
+  "NoLanesToUpdate": "No lanes to update",
+  "NextRoundStartedUndoAvailable": "Next round started (undo available)",
+  "ErrorStartingNextRound": "Error starting next round",
+  "ErrorUpdatingLane": "Error updating lane"
 }

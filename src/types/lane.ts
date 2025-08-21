@@ -30,11 +30,11 @@ export type LaneType = (typeof LANE_TYPES)[number];
 
 export interface LaneModel {
   id: number;
-  laneType: LaneType | null; // canonical
-  /** @deprecated mirror for legacy UI; can be removed after migration */
-  category: string | null;
-  competitor: Competitor | null;
-  readyUp: Competitor | null;
-  laneDocId?: string;
-  locked?: boolean;
+  laneDocId: string;
+  laneType: LaneType | null;
+  nextLaneType?: LaneType | null;
+  category: LaneType | null;
+  competitor: { id: string; name: string; category: string } | null;
+  readyUp: { id: string; name: string; category: string } | null;
+  locked: boolean;
 }

@@ -53,6 +53,47 @@ const normalizeExerciseType = (raw: any): ExerciseType => {
   return "bench";
 };
 
+/** Lane type that controls READY UP (next round takes precedence) */
+const readyUpLaneType = (lane: LaneModel): LaneType | null =>
+  lane.nextLaneType ?? lane.laneType ?? null;
+
+/** Allowed categories for READY UP (uses nextLaneType if set) */
+const getAllowedForReadyUp = (
+  exerciseType: ExerciseType,
+  lane: LaneModel
+): string[] => {
+  const lt = readyUpLaneType(lane);
+  return lt ? getAllowedCategoriesForLane(exerciseType, lt) : [];
+};
+
+/** Check if category can go to READY UP (uses nextLaneType if set) */
+const isCategoryAllowedForReady = (
+  exerciseType: ExerciseType,
+  lane: LaneModel,
+  category: string
+): boolean => {
+  const lt = readyUpLaneType(lane);
+  return !!lt && isCategoryAllowedForLane(exerciseType, lt, category);
+};
+
+/** Group lanes by READY UP controlling lane type (nextLaneType first) */
+function groupLanesByReadyType(
+  lanes: LaneModel[],
+  predicate: (l: LaneModel) => boolean
+): Map<LaneType, LaneModel[]> {
+  const m = new Map<LaneType, LaneModel[]>();
+  for (const l of lanes) {
+    if (!predicate(l)) continue;
+    const key = readyUpLaneType(l);
+    if (!key) continue;
+    const arr = m.get(key) ?? [];
+    arr.push(l);
+    m.set(key, arr);
+  }
+  for (const [k, arr] of m) arr.sort((a, b) => a.id - b.id);
+  return m;
+}
+
 export default function CompetitionPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<"competitors" | "lanes" | "done">(
@@ -138,6 +179,11 @@ export default function CompetitionPage() {
           laneDocId: d.id,
           id: data.id,
           laneType,
+          nextLaneType: (LANE_TYPES as readonly string[]).includes(
+            data.nextLaneType
+          )
+            ? (data.nextLaneType as LaneType)
+            : null, // ✅ NEW
           category: laneType, // mirror for back-compat
           competitor: data.competitor ?? null,
           readyUp: data.readyUp ?? null,
@@ -315,12 +361,13 @@ export default function CompetitionPage() {
     }
 
     // ---- 2) READYUP (lanes with NOW but no READYUP) ----
-    const needReadyByType = groupLanesByType(
+    // Use nextLaneType if present to decide which categories should queue.
+    const needReadyByType = groupLanesByReadyType(
       lanes,
       (l) => !!l.competitor && !l.readyUp && !l.locked
     );
-    for (const [laneType, needReady] of needReadyByType) {
-      const priority = getAllowedCategoriesForLane(exerciseType, laneType);
+    for (const [effectiveType, needReady] of needReadyByType) {
+      const priority = getAllowedCategoriesForLane(exerciseType, effectiveType);
       if (!priority.length) continue;
 
       const queue = [...needReady];
@@ -436,16 +483,37 @@ export default function CompetitionPage() {
           );
         }
 
-        tx.update(lref, after);
+        // ✅ Apply pending lane type, if any
+        const applyType =
+          data.nextLaneType && data.nextLaneType !== data.laneType;
+        tx.update(lref, {
+          ...after,
+          ...(applyType
+            ? {
+                laneType: data.nextLaneType,
+                category: data.nextLaneType,
+                nextLaneType: null,
+              }
+            : {}),
+        });
 
         lanePatches.push({
           laneDocId: lane.laneDocId!,
           laneId: lane.id,
           before,
-          after,
+          after: {
+            ...after,
+            ...(applyType
+              ? {
+                  // reflect type change in the history AFTER snapshot
+                  // (no need to include category mirror in the patch payload if you don’t use it later)
+                  laneType: data.nextLaneType,
+                }
+              : {}),
+          } as any,
         });
 
-        // history doc inside the same tx
+        // history doc
         const actionRef = doc(
           collection(db, "exercises", exerciseId, "actions")
         );
@@ -459,10 +527,12 @@ export default function CompetitionPage() {
         } as ActionHistory);
       });
 
-      toast.success("Lane cleared");
+      toast.success(t("LaneCleared", { defaultValue: "Lane cleared" }));
     } catch (err) {
       console.error("Failed to clear lane", err);
-      toast.error("Error updating lane");
+      toast.error(
+        t("ErrorUpdatingLane", { defaultValue: "Error updating lane" })
+      );
     }
   };
 
@@ -483,7 +553,8 @@ export default function CompetitionPage() {
         competitor: lane.competitor ?? null,
         readyUp: lane.readyUp ?? null,
       };
-      const after = {
+
+      const afterCore = {
         competitor: lane.readyUp ? { ...lane.readyUp } : null,
         readyUp: null,
       };
@@ -512,21 +583,37 @@ export default function CompetitionPage() {
         );
       }
 
-      // lane update
-      batch.update(
-        doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
-        after
-      );
+      // ✅ apply nextLaneType if present
+      const applyType =
+        !!lane.nextLaneType && lane.nextLaneType !== lane.laneType;
+      const lref = doc(db, "exercises", exerciseId, "lanes", lane.laneDocId);
+      batch.update(lref, {
+        ...afterCore,
+        ...(applyType
+          ? {
+              laneType: lane.nextLaneType,
+              category: lane.nextLaneType,
+              nextLaneType: null,
+            }
+          : {}),
+      });
+
       lanePatches.push({
         laneDocId: lane.laneDocId,
         laneId: lane.id,
         before,
-        after,
+        after: {
+          ...afterCore,
+          ...(applyType ? { laneType: lane.nextLaneType } : {}),
+        } as any,
       });
       affected++;
     }
 
-    if (!affected) return toast.error("No lanes to update");
+    if (!affected)
+      return toast.error(
+        t("NoLanesToUpdate", { defaultValue: "No lanes to update" })
+      );
 
     const actionRef = doc(collection(db, "exercises", exerciseId, "actions"));
     batch.set(actionRef, {
@@ -540,12 +627,21 @@ export default function CompetitionPage() {
 
     try {
       await batch.commit();
-      toast.success("Next round started (undo available)");
+      toast.success(
+        t("NextRoundStartedUndoAvailable", {
+          defaultValue: "Next round started (undo available)",
+        })
+      );
     } catch (err) {
       console.error("Next round failed", err);
-      toast.error("Error starting next round");
+      toast.error(
+        t("ErrorStartingNextRound", {
+          defaultValue: "Error starting next round",
+        })
+      );
     }
   };
+
   const fillLaneWithCompetitor = async (competitor: Competitor) => {
     if (!exerciseId) return;
 
@@ -565,15 +661,10 @@ export default function CompetitionPage() {
     const readyLane = !nowLane
       ? lanes.find(
           (lane) =>
-            lane.laneType &&
             !lane.locked &&
             lane.competitor &&
             !lane.readyUp &&
-            isCategoryAllowedForLane(
-              exerciseType,
-              lane.laneType,
-              competitor.category
-            )
+            isCategoryAllowedForReady(exerciseType, lane, competitor.category)
         )
       : null;
 
@@ -685,8 +776,12 @@ export default function CompetitionPage() {
   const returnDoneCompetitorToLane = async (competitor: Competitor) => {
     if (!exerciseId) return;
 
-    // 1) Build deterministic candidate lists from current in‑memory lanes
-    const compatible = (lane: LaneModel) =>
+    // Helper: which lane type governs READY UP (next round takes precedence)
+    const readyUpLaneType = (lane: LaneModel): LaneType | null =>
+      lane.nextLaneType ?? lane.laneType ?? null;
+
+    // Compatibility checks
+    const compatibleForNow = (lane: LaneModel) =>
       lane.laneType &&
       !lane.locked &&
       isCategoryAllowedForLane(
@@ -695,26 +790,34 @@ export default function CompetitionPage() {
         competitor.category
       );
 
-    // Prefer NOW (competitor slot) first, regardless of readyUp content
+    const compatibleForReady = (lane: LaneModel) => {
+      const lt = readyUpLaneType(lane);
+      return (
+        !lane.locked &&
+        !!lt &&
+        isCategoryAllowedForLane(exerciseType, lt, competitor.category)
+      );
+    };
+
+    // Prefer NOW (empty competitor slot), then READY UP (occupied lane with empty readyUp)
     const nowCandidates = lanes
-      .filter((l) => compatible(l) && l.competitor === null)
+      .filter((l) => compatibleForNow(l) && l.competitor === null)
       .sort((a, b) => a.id - b.id);
 
-    // If no NOW available, try READY UP on occupied lanes
     const readyUpCandidates = lanes
       .filter(
-        (l) => compatible(l) && l.competitor !== null && l.readyUp === null
+        (l) =>
+          compatibleForReady(l) && l.competitor !== null && l.readyUp === null
       )
       .sort((a, b) => a.id - b.id);
 
-    // Helper to attempt a single lane placement inside a transaction
+    // Try a single placement atomically
     const tryAssign = async (
       targetLane: LaneModel,
       slot: "now" | "readyUp"
     ): Promise<boolean> => {
       try {
         await runTransaction(db, async (tx) => {
-          // Fresh refs
           const lref = doc(
             db,
             "exercises",
@@ -740,11 +843,53 @@ export default function CompetitionPage() {
           if (slot === "now") {
             if (data.competitor)
               throw new Error("Lane competitor slot is no longer free");
+            // Validate AGAINST CURRENT laneType
+            const currentLt: LaneType | null =
+              data.laneType &&
+              (LANE_TYPES as readonly string[]).includes(data.laneType)
+                ? (data.laneType as LaneType)
+                : null;
+            if (
+              !currentLt ||
+              !isCategoryAllowedForLane(
+                exerciseType,
+                currentLt,
+                competitor.category
+              )
+            ) {
+              throw new Error(
+                "Category not allowed for current lane type (NOW)"
+              );
+            }
           } else {
             if (data.readyUp)
               throw new Error("Lane readyUp slot is no longer free");
             if (!data.competitor)
               throw new Error("Cannot place readyUp on an empty lane");
+
+            // Validate AGAINST nextLaneType ?? laneType
+            const effectiveLt: LaneType | null = (() => {
+              const nx = data.nextLaneType;
+              const cur = data.laneType;
+              if (nx && (LANE_TYPES as readonly string[]).includes(nx))
+                return nx as LaneType;
+              if (cur && (LANE_TYPES as readonly string[]).includes(cur))
+                return cur as LaneType;
+              return null;
+            })();
+
+            if (
+              !effectiveLt ||
+              !isCategoryAllowedForLane(
+                exerciseType,
+                effectiveLt,
+                competitor.category
+              )
+            ) {
+              throw new Error(
+                "Category not allowed for next/current lane type (READY UP)"
+              );
+            }
           }
 
           const before = {
@@ -752,7 +897,6 @@ export default function CompetitionPage() {
             readyUp: data.readyUp ?? null,
           };
 
-          // Build "after" based on the chosen slot
           const competitorPayload = {
             id: competitor.id,
             name: competitor.name,
@@ -763,13 +907,11 @@ export default function CompetitionPage() {
             slot === "now"
               ? {
                   competitor: competitorPayload,
-                  // keep existing readyUp as is
                   ...(data.readyUp !== undefined
                     ? { readyUp: data.readyUp }
                     : {}),
                 }
               : {
-                  // keep existing competitor as is
                   ...(data.competitor !== undefined
                     ? { competitor: data.competitor }
                     : {}),
@@ -778,7 +920,7 @@ export default function CompetitionPage() {
 
           // Writes
           tx.update(lref, after);
-          tx.update(cref, { status: slot === "now" ? "lane" : "readyUp" });
+          tx.update(cref, { status: slot === "now" ? "lane" : "ready" }); // ✅ keep "ready" consistent with the rest
 
           // History
           const actionRef = doc(
@@ -801,7 +943,7 @@ export default function CompetitionPage() {
               {
                 competitorId: competitor.id,
                 beforeStatus: (cs.data() as any).status,
-                afterStatus: slot === "now" ? "lane" : "readyUp",
+                afterStatus: slot === "now" ? "lane" : "ready", // ✅ consistent
               } as CompetitorPatch,
             ],
             undone: false,
@@ -815,7 +957,7 @@ export default function CompetitionPage() {
         );
         return true;
       } catch (err) {
-        // Silent fail for retry path; log for debugging
+        // Silent for retry; log for debug
         console.warn(
           `[returnDoneCompetitorToLane] retryable failure on slot=${slot}`,
           err
@@ -824,7 +966,7 @@ export default function CompetitionPage() {
       }
     };
 
-    // 2) Try NOW first (in order), then READY UP (in order)
+    // Try NOW first, then READY UP
     for (const ln of nowCandidates) {
       const ok = await tryAssign(ln, "now");
       if (ok) return;
@@ -834,7 +976,6 @@ export default function CompetitionPage() {
       if (ok) return;
     }
 
-    // 3) Nothing worked (including transactional rechecks)
     toast.error(
       `No compatible lane or ready up slot for ${competitor.category}`
     );

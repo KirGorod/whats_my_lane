@@ -65,5 +65,16 @@
   "defaultRowing": "Загальна",
   "laneTypeSelect.jerk": "Ривок",
   "laneTypeSelect.bench": "Жим",
-  "LaneLocked": "Заблоковано"
+  "LaneLocked": "Заблоковано",
+  "Next": "Далі",
+  "NotSet": "Не встановлено",
+  "Reset": "Скинути",
+  "NextRoundLaneTypeSet": "Тип доріжки на наступний раунд збережено",
+  "CannotRemoveLaneWithCompetitor": "Неможливо видалити доріжку, якщо на ній є учасник",
+  "CannotChangeTypeWhenOccupied": "Неможливо змінити тип доріжки, якщо вона зайнята",
+  "LaneCleared": "Доріжку очищено",
+  "NoLanesToUpdate": "Немає доріжок для оновлення",
+  "NextRoundStartedUndoAvailable": "Розпочато наступний раунд (можна скасувати)",
+  "ErrorStartingNextRound": "Помилка запуску наступного раунду",
+  "ErrorUpdatingLane": "Помилка оновлення доріжки"
 }

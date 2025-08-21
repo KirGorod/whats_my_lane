@@ -158,7 +158,6 @@ export default function Lanes({
         newId = existingIds.length + 1;
       }
 
-      // Cycle lane types for the exercise
       const laneTypeToAssign =
         laneTypeOptions.length > 0
           ? (laneTypeOptions[lanes.length % laneTypeOptions.length] as LaneType)
@@ -168,6 +167,7 @@ export default function Lanes({
         id: newId,
         laneType: laneTypeToAssign,
         category: laneTypeToAssign, // mirror for back-compat
+        nextLaneType: null, // ✅ NEW
         competitor: null,
         readyUp: null,
         locked: false,
