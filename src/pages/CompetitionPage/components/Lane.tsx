@@ -50,15 +50,18 @@ export default function Lane({
   clearLane,
   laneTypeOptions,
   exerciseType,
+  isPending = false, // NEW
+  onDone, // NEW (wrapped clearLane from parent)
 }: {
   lane: LaneModel;
   exerciseId: string;
   clearLane: (laneId: number) => void;
   laneTypeOptions: LaneType[];
   exerciseType: ExerciseType;
+  isPending?: boolean; // NEW
+  onDone?: () => void; // NEW
 }) {
   const { t } = useTranslation();
-
   const { isAdmin } = useAuth();
 
   const removeLane = async (laneDocId: string) => {
@@ -80,8 +83,8 @@ export default function Lane({
     }
     try {
       await updateDoc(doc(db, "exercises", exerciseId, "lanes", laneDocId), {
-        laneType: newLaneType, // canonical
-        category: newLaneType, // mirror for back-compat
+        laneType: newLaneType,
+        category: newLaneType,
       });
     } catch (err) {
       console.error("Error updating lane type", err);
@@ -92,9 +95,7 @@ export default function Lane({
     try {
       await updateDoc(
         doc(db, "exercises", exerciseId, "lanes", lane.laneDocId as string),
-        {
-          locked: !lane.locked,
-        }
+        { locked: !lane.locked }
       );
       toast.success(!lane.locked ? t("LaneLocked") : t("LaneUnlocked"));
     } catch (e) {
@@ -108,17 +109,29 @@ export default function Lane({
   return (
     <Card
       key={lane.id}
-      className="relative border border-gray-200 flex flex-col rounded-lg overflow-hidden"
+      className={[
+        "relative border border-gray-200 flex flex-col rounded-lg overflow-hidden",
+        isPending ? "opacity-60 saturate-0" : "",
+      ].join(" ")}
+      aria-busy={isPending}
+      aria-disabled={isPending}
     >
-      {/* 🔴 Transparent red veil when locked */}
+      {/* 🔴 Locked overlay (existing) */}
       {lane.locked && (
         <div className="pointer-events-none absolute inset-0 bg-red-500/40 backdrop-brightness-95 flex flex-col items-center justify-center text-black z-10">
           <Lock className="w-16 h-16 mb-2" />
-          <span className="text-3xl font-bold">
-            {" "}
-            {/* bigger text */}
-            {t("LaneLocked")}
-          </span>
+          <span className="text-3xl font-bold">{t("LaneLocked")}</span>
+        </div>
+      )}
+
+      {/* 🟡 Pending overlay to block interactions */}
+      {isPending && (
+        <div className="absolute inset-0 z-10 pointer-events-auto flex items-center justify-center">
+          {/* transparent blocker; optional spinner */}
+          <div className="absolute inset-0 bg-white/20" />
+          <div className="relative text-xs font-medium px-2 py-1 rounded bg-white/80 border">
+            {t("Processing")}…
+          </div>
         </div>
       )}
 
@@ -129,13 +142,13 @@ export default function Lane({
           </CardTitle>
 
           <div className="flex items-center gap-2">
-            {/* Icon-only lock/unlock for admin */}
             {isAdmin && (
               <Button
                 size="icon"
                 variant={lane.locked ? "destructive" : "outline"}
                 className="h-8 w-8"
                 onClick={toggleLock}
+                disabled={isPending}
                 title={
                   lane.locked
                     ? t("UnlockLane", { defaultValue: "Unlock lane" })
@@ -150,10 +163,11 @@ export default function Lane({
               </Button>
             )}
 
-            {/* Lane type selector (admin) or badge (viewer) */}
             {isAdmin ? (
               <Select
-                disabled={!laneTypeOptions.length || !!lane.competitor}
+                disabled={
+                  !laneTypeOptions.length || !!lane.competitor || isPending
+                }
                 value={lane.laneType ?? ""}
                 onValueChange={(value) =>
                   updateLaneType(lane.laneDocId as string, value as LaneType)
@@ -182,7 +196,6 @@ export default function Lane({
           </div>
         </div>
 
-        {/* Allowed categories helper */}
         {!!allowedCats.length && (
           <div className="mt-2 text-xs text-gray-500">
             {t("Allowed")}: {allowedCats.map((cat) => t(cat)).join(", ")}
@@ -190,7 +203,6 @@ export default function Lane({
         )}
       </CardHeader>
 
-      {/* Content */}
       <CardContent className="space-y-3 flex-grow">
         {/* Now */}
         <div className="bg-green-200 border border-green-400 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
@@ -241,25 +253,25 @@ export default function Lane({
         </div>
       </CardContent>
 
-      {/* Footer */}
       {isAdmin && (
         <div className="flex items-center justify-between gap-2 px-4 pb-3">
           <Button
-            onClick={() => clearLane(lane.id)}
+            onClick={onDone ? onDone : () => clearLane(lane.id)}
             size="sm"
-            className="flex items-center justify-center gap-1 flex-1"
+            className="flex items-center justify-center gap-1 flex-1 disabled:opacity-50 disabled:pointer-events-none"
+            disabled={isPending}
           >
             <Flag className="w-4 h-4" />
             {t("Done")}
           </Button>
 
-          {/* hide remove when locked or occupied */}
           {!lane.competitor && !lane.readyUp && !lane.locked && (
             <Button
               onClick={() => removeLane(lane.laneDocId as string)}
               size="icon"
               variant="outline"
-              className="h-8 w-8"
+              className="h-8 w-8 disabled:opacity-50 disabled:pointer-events-none"
+              disabled={isPending}
             >
               <Trash2 className="w-4 h-4" />
             </Button>

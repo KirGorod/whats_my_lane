@@ -66,6 +66,20 @@ export default function Lanes({
   const { isAdmin } = useAuth();
   const [exerciseType, setExerciseType] = useState<ExerciseType>("bench");
   const [undoBusy, setUndoBusy] = useState(false);
+  const [pendingLaneIds, setPendingLaneIds] = useState<Set<number>>(new Set());
+
+  const handleDone = async (laneId: number) => {
+    setPendingLaneIds((prev) => new Set(prev).add(laneId));
+    try {
+      await Promise.resolve(clearLane(laneId));
+    } finally {
+      setPendingLaneIds((prev) => {
+        const next = new Set(prev);
+        next.delete(laneId);
+        return next;
+      });
+    }
+  };
 
   // Live exercise type (normalized)
   useEffect(() => {
@@ -256,6 +270,8 @@ export default function Lanes({
             key={lane.id}
             lane={lane}
             exerciseId={exerciseId}
+            isPending={pendingLaneIds.has(lane.id)}
+            onDone={() => handleDone(lane.id)}
             clearLane={clearLane}
             laneTypeOptions={laneTypeOptions}
             exerciseType={exerciseType}

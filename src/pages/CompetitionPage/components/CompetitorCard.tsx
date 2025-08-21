@@ -9,18 +9,21 @@ type Competitor = {
   id: string;
   name: string;
   category: string;
+  orderRank?: number;
 };
 
 export default function CompetitorCard({
   competitor,
   position,
-  fillLaneWithCompetitor,
-  removeCompetitor,
+  onFill,
+  onRemove,
+  isPending = false,
 }: {
   competitor: Competitor;
   position?: number;
-  fillLaneWithCompetitor: (c: Competitor) => void;
-  removeCompetitor: (c: Competitor) => void;
+  onFill: (c: Competitor) => void | Promise<void>;
+  onRemove: (c: Competitor) => void | Promise<void>;
+  isPending?: boolean;
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
@@ -29,8 +32,12 @@ export default function CompetitorCard({
 
   return (
     <div
-      key={competitor.id}
-      className="bg-slate-100 rounded-lg p-3 space-y-3 group transition-all duration-300"
+      className={[
+        "bg-slate-100 rounded-lg p-3 space-y-3 group transition-all duration-300",
+        isPending ? "opacity-60 saturate-0" : "",
+      ].join(" ")}
+      aria-busy={isPending}
+      aria-disabled={isPending}
     >
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2 min-w-0">
@@ -53,20 +60,22 @@ export default function CompetitorCard({
         <div className="max-h-20">
           <div className="flex justify-between gap-1 pt-2">
             <Button
-              onClick={() => removeCompetitor(competitor)}
+              onClick={() => onRemove(competitor)}
               variant="ghost"
               size="icon"
-              className="text-red-500 hover:text-red-700"
+              className="text-red-500 hover:text-red-700 disabled:opacity-50 disabled:pointer-events-none"
               aria-label={`${t("Remove")} ${competitor.name}`}
+              disabled={isPending}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
             <Button
-              onClick={() => fillLaneWithCompetitor(competitor)}
+              onClick={() => onFill(competitor)}
               variant="ghost"
               size="icon"
-              className="text-blue-500 hover:text-blue-700"
+              className="text-blue-500 hover:text-blue-700 disabled:opacity-50 disabled:pointer-events-none"
               aria-label={`${t("SendToLane")} ${competitor.name}`}
+              disabled={isPending}
             >
               <ArrowBigRight className="w-5 h-5" />
             </Button>

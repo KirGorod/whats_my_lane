@@ -685,98 +685,159 @@ export default function CompetitionPage() {
   const returnDoneCompetitorToLane = async (competitor: Competitor) => {
     if (!exerciseId) return;
 
-    const availableLane = lanes.find(
-      (lane) =>
-        lane.laneType &&
-        !lane.locked &&
-        lane.competitor === null &&
-        lane.readyUp === null &&
-        isCategoryAllowedForLane(
-          exerciseType,
-          lane.laneType,
-          competitor.category
-        )
-    );
+    // 1) Build deterministic candidate lists from current in‑memory lanes
+    const compatible = (lane: LaneModel) =>
+      lane.laneType &&
+      !lane.locked &&
+      isCategoryAllowedForLane(
+        exerciseType,
+        lane.laneType,
+        competitor.category
+      );
 
-    if (!availableLane) {
-      toast.error(`No free compatible lane for ${competitor.category}`);
-      return;
-    }
+    // Prefer NOW (competitor slot) first, regardless of readyUp content
+    const nowCandidates = lanes
+      .filter((l) => compatible(l) && l.competitor === null)
+      .sort((a, b) => a.id - b.id);
 
-    try {
-      await runTransaction(db, async (tx) => {
-        const lref = doc(
-          db,
-          "exercises",
-          exerciseId,
-          "lanes",
-          availableLane.laneDocId!
-        );
-        const cref = doc(
-          db,
-          "exercises",
-          exerciseId,
-          "competitors",
-          competitor.id
-        );
+    // If no NOW available, try READY UP on occupied lanes
+    const readyUpCandidates = lanes
+      .filter(
+        (l) => compatible(l) && l.competitor !== null && l.readyUp === null
+      )
+      .sort((a, b) => a.id - b.id);
 
-        const [ls, cs] = await Promise.all([tx.get(lref), tx.get(cref)]);
-        if (!ls.exists() || !cs.exists())
-          throw new Error("Lane or competitor disappeared");
-        const data = ls.data() as any;
+    // Helper to attempt a single lane placement inside a transaction
+    const tryAssign = async (
+      targetLane: LaneModel,
+      slot: "now" | "readyUp"
+    ): Promise<boolean> => {
+      try {
+        await runTransaction(db, async (tx) => {
+          // Fresh refs
+          const lref = doc(
+            db,
+            "exercises",
+            exerciseId,
+            "lanes",
+            targetLane.laneDocId!
+          );
+          const cref = doc(
+            db,
+            "exercises",
+            exerciseId,
+            "competitors",
+            competitor.id
+          );
 
-        if (data.competitor || data.readyUp)
-          throw new Error("Lane is no longer free");
+          const [ls, cs] = await Promise.all([tx.get(lref), tx.get(cref)]);
+          if (!ls.exists() || !cs.exists())
+            throw new Error("Lane or competitor disappeared");
 
-        const before = {
-          competitor: data.competitor ?? null,
-          readyUp: data.readyUp ?? null,
-        };
-        const after = {
-          competitor: {
+          const data = ls.data() as any;
+
+          // Re‑validate slot availability atomically
+          if (slot === "now") {
+            if (data.competitor)
+              throw new Error("Lane competitor slot is no longer free");
+          } else {
+            if (data.readyUp)
+              throw new Error("Lane readyUp slot is no longer free");
+            if (!data.competitor)
+              throw new Error("Cannot place readyUp on an empty lane");
+          }
+
+          const before = {
+            competitor: data.competitor ?? null,
+            readyUp: data.readyUp ?? null,
+          };
+
+          // Build "after" based on the chosen slot
+          const competitorPayload = {
             id: competitor.id,
             name: competitor.name,
             category: competitor.category,
-          },
-          readyUp: null,
-        };
+          };
 
-        // writes
-        tx.update(lref, after);
-        tx.update(cref, { status: "lane" });
+          const after =
+            slot === "now"
+              ? {
+                  competitor: competitorPayload,
+                  // keep existing readyUp as is
+                  ...(data.readyUp !== undefined
+                    ? { readyUp: data.readyUp }
+                    : {}),
+                }
+              : {
+                  // keep existing competitor as is
+                  ...(data.competitor !== undefined
+                    ? { competitor: data.competitor }
+                    : {}),
+                  readyUp: competitorPayload,
+                };
 
-        // history
-        const actionRef = doc(
-          collection(db, "exercises", exerciseId, "actions")
+          // Writes
+          tx.update(lref, after);
+          tx.update(cref, { status: slot === "now" ? "lane" : "readyUp" });
+
+          // History
+          const actionRef = doc(
+            collection(db, "exercises", exerciseId, "actions")
+          );
+          tx.set(actionRef, {
+            action: "returnDone",
+            slot, // "now" | "readyUp"
+            createdAt: serverTimestamp(),
+            createdBy: null,
+            lanes: [
+              {
+                laneDocId: targetLane.laneDocId!,
+                laneId: targetLane.id,
+                before,
+                after,
+              } as LanePatch,
+            ],
+            competitors: [
+              {
+                competitorId: competitor.id,
+                beforeStatus: (cs.data() as any).status,
+                afterStatus: slot === "now" ? "lane" : "readyUp",
+              } as CompetitorPatch,
+            ],
+            undone: false,
+          } as ActionHistory);
+        });
+
+        toast.success(
+          slot === "now"
+            ? `${competitor.name} assigned to lane ${targetLane.id}`
+            : `${competitor.name} queued in ready up on lane ${targetLane.id}`
         );
-        tx.set(actionRef, {
-          action: "returnDone",
-          createdAt: serverTimestamp(),
-          createdBy: null,
-          lanes: [
-            {
-              laneDocId: availableLane.laneDocId!,
-              laneId: availableLane.id,
-              before,
-              after,
-            } as LanePatch,
-          ],
-          competitors: [
-            {
-              competitorId: competitor.id,
-              beforeStatus: (cs.data() as any).status,
-              afterStatus: "lane",
-            } as CompetitorPatch,
-          ],
-          undone: false,
-        } as ActionHistory);
-      });
+        return true;
+      } catch (err) {
+        // Silent fail for retry path; log for debugging
+        console.warn(
+          `[returnDoneCompetitorToLane] retryable failure on slot=${slot}`,
+          err
+        );
+        return false;
+      }
+    };
 
-      toast.success(`${competitor.name} assigned to lane ${availableLane.id}`);
-    } catch (err) {
-      console.error("Failed to return competitor", err);
-      toast.error("Failed to return competitor to lane");
+    // 2) Try NOW first (in order), then READY UP (in order)
+    for (const ln of nowCandidates) {
+      const ok = await tryAssign(ln, "now");
+      if (ok) return;
     }
+    for (const ln of readyUpCandidates) {
+      const ok = await tryAssign(ln, "readyUp");
+      if (ok) return;
+    }
+
+    // 3) Nothing worked (including transactional rechecks)
+    toast.error(
+      `No compatible lane or ready up slot for ${competitor.category}`
+    );
   };
 
   if (!exerciseId) {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CheckCircle } from "lucide-react";
 import DoneCompetitorCard from "./DoneCompetitorCard";
 import { useTranslation } from "react-i18next";
@@ -7,6 +8,22 @@ const DoneCompetitorsList = ({
   returnDoneCompetitorToLane,
 }) => {
   const { t } = useTranslation();
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+
+  const handleReturn = async (competitor) => {
+    // mark as pending
+    setPendingIds((prev) => new Set(prev).add(competitor.id));
+    try {
+      await returnDoneCompetitorToLane(competitor);
+    } finally {
+      // always clear pending
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(competitor.id);
+        return next;
+      });
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow">
@@ -33,7 +50,8 @@ const DoneCompetitorsList = ({
               index={index}
               competitor={competitor}
               doneCompetitors={doneCompetitors}
-              returnDoneCompetitorToLane={returnDoneCompetitorToLane}
+              onReturn={handleReturn}
+              isPending={pendingIds.has(competitor.id)}
             />
           ))
         )}

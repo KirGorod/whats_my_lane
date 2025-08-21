@@ -8,8 +8,7 @@ import CompetitorCard from "./CompetitorCard";
 import { toast } from "sonner";
 import { db } from "../../../firebase";
 import { doc, writeBatch } from "firebase/firestore";
-
-// dnd-kit
+// dnd-kit imports ...
 import {
   DndContext,
   closestCenter,
@@ -42,14 +41,16 @@ const SortableCompetitorRow = ({
   competitor,
   position,
   disabled,
-  fillLaneWithCompetitor,
-  removeCompetitor,
+  isPending,
+  onFill,
+  onRemove,
 }: {
   competitor: Competitor;
-  disabled: boolean;
   position: number;
-  fillLaneWithCompetitor: (c: Competitor) => void;
-  removeCompetitor: (c: Competitor) => void;
+  disabled: boolean; // DnD disabled flag
+  isPending: boolean; // new
+  onFill: (c: Competitor) => Promise<void> | void;
+  onRemove: (c: Competitor) => Promise<void> | void;
 }) => {
   const {
     attributes,
@@ -58,13 +59,14 @@ const SortableCompetitorRow = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: competitor.id, disabled });
+  } = useSortable({ id: competitor.id, disabled: disabled || isPending });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : undefined,
-    cursor: disabled ? "default" : "grab",
+    cursor: disabled || isPending ? "default" : "grab",
+    filter: isPending ? "grayscale(1)" : undefined,
   };
 
   return (
@@ -72,8 +74,9 @@ const SortableCompetitorRow = ({
       <CompetitorCard
         competitor={competitor}
         position={position}
-        fillLaneWithCompetitor={fillLaneWithCompetitor}
-        removeCompetitor={removeCompetitor}
+        onFill={onFill}
+        onRemove={onRemove}
+        isPending={isPending}
       />
     </div>
   );
@@ -88,13 +91,16 @@ const CompetitorsList = ({
 }: {
   exerciseId: string;
   competitors: Competitor[]; // ordered by orderRank asc from parent
-  removeCompetitor: (c: Competitor) => void;
-  addCompetitor: (c: Omit<Competitor, "id">) => void;
-  fillLaneWithCompetitor: (c: Competitor) => void;
+  removeCompetitor: (c: Competitor) => Promise<void> | void;
+  addCompetitor: (c: Omit<Competitor, "id">) => Promise<void> | void;
+  fillLaneWithCompetitor: (c: Competitor) => Promise<void> | void;
 }) => {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+
+  // 🔹 Track competitors currently performing an async action
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   // Keep a local master order of IDs; resync when incoming list changes.
   const [items, setItems] = useState<string[]>([]);
@@ -102,13 +108,11 @@ const CompetitorsList = ({
     setItems(competitors.map((c) => c.id));
   }, [competitors]);
 
-  // Sensors for mouse/touch/keyboard dragging
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Filtered list + keep its order according to `items`
   const filteredCompetitors = useMemo(() => {
     const term = searchTerm.toLowerCase();
     const list = term
@@ -121,7 +125,6 @@ const CompetitorsList = ({
     );
   }, [competitors, searchTerm, items]);
 
-  // IMPORTANT: SortableContext must receive ONLY the IDs that are actually rendered
   const filteredIds = useMemo(
     () => filteredCompetitors.map((c) => c.id),
     [filteredCompetitors]
@@ -135,7 +138,6 @@ const CompetitorsList = ({
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    // Reorder within the filtered subset first
     const oldFilteredIndex = filteredIds.indexOf(String(active.id));
     const newFilteredIndex = filteredIds.indexOf(String(over.id));
     if (oldFilteredIndex === -1 || newFilteredIndex === -1) return;
@@ -146,7 +148,6 @@ const CompetitorsList = ({
       newFilteredIndex
     );
 
-    // Merge the new filtered order back into the FULL order `items`
     const filteredSet = new Set(filteredIds);
     const replacementQueue = [...newFilteredOrder];
     const merged: string[] = items.map((id) =>
@@ -155,7 +156,6 @@ const CompetitorsList = ({
 
     setItems(merged);
 
-    // Persist with a batch (orderRank = 1..n)
     try {
       const batch = writeBatch(db);
       merged.forEach((competitorId, idx) => {
@@ -175,6 +175,26 @@ const CompetitorsList = ({
       toast.error("Failed to save new order");
     }
   };
+
+  // 🔹 Wrap async actions to set/clear pending per competitor
+  const withPending =
+    (id: string, fn: () => Promise<void> | void) => async () => {
+      setPendingIds((prev) => new Set(prev).add(id));
+      try {
+        await Promise.resolve(fn());
+      } finally {
+        setPendingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    };
+
+  const handleFill = (c: Competitor) =>
+    withPending(c.id, () => fillLaneWithCompetitor(c))();
+  const handleRemove = (c: Competitor) =>
+    withPending(c.id, () => removeCompetitor(c))();
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow">
@@ -245,8 +265,9 @@ const CompetitorsList = ({
                   competitor={competitor}
                   position={index + 1}
                   disabled={draggingDisabled}
-                  fillLaneWithCompetitor={fillLaneWithCompetitor}
-                  removeCompetitor={removeCompetitor}
+                  isPending={pendingIds.has(competitor.id)}
+                  onFill={handleFill}
+                  onRemove={handleRemove}
                 />
               ))}
             </SortableContext>
