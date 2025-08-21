@@ -48,8 +48,57 @@ function useCompetitorCounts(exerciseId: string) {
   return { total, waiting };
 }
 
+// Robust formatter for "HH:mm" | null | ISO | Date | Firestore Timestamp
+function formatTimeAny(value: any, t: (k: string) => string): string {
+  if (!value) return t("NotSet") || "—";
+
+  // String cases
+  if (typeof value === "string") {
+    // Already "HH:mm"
+    const hhmm = value.match(/^(\d{2}):(\d{2})$/);
+    if (hhmm) return value;
+
+    // ISO-like with "T"
+    const iso = value.match(/T(\d{2}):(\d{2})/);
+    if (iso) return `${iso[1]}:${iso[2]}`;
+
+    // Try Date parse fallback
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString("uk-UA", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    }
+    return t("NotSet") || "—";
+  }
+
+  // Firestore Timestamp
+  if (value && typeof value.toDate === "function") {
+    const d = value.toDate();
+    return d.toLocaleTimeString("uk-UA", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+
+  // Date or other coercible types
+  const d = new Date(value);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleTimeString("uk-UA", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+
+  return t("NotSet") || "—";
+}
+
 type Props = {
-  exercise: any;
+  exercise: any; // keep as any to avoid refactors here
   handleEdit: (e: any) => void;
   handleDelete: (e: any) => void;
 };
@@ -151,11 +200,7 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
               {t("timeToStart")}
             </span>
             <span className="text-gray-600">
-              {new Date(exercise.timeToStart).toLocaleTimeString("uk-UA", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              })}
+              {formatTimeAny(exercise.timeToStart, t)}
             </span>
           </div>
 

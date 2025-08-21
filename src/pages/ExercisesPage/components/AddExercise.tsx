@@ -28,6 +28,45 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
+// --- helpers ---
+function normalizeToHHmm(value: unknown): string {
+  // Accepts "", null, "HH:mm", "YYYY-MM-DDTHH:mm", ISO, Date, etc.
+  if (!value) return "";
+  if (typeof value === "string") {
+    // If already HH:mm
+    const hhmm = value.match(/^(\d{2}):(\d{2})$/);
+    if (hhmm) return value;
+
+    // Try to pull HH:mm from an ISO-like string
+    const iso = value.match(/T(\d{2}):(\d{2})/);
+    if (iso) return `${iso[1]}:${iso[2]}`;
+
+    // Fallback: try Date parse
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      const h = String(d.getHours()).padStart(2, "0");
+      const m = String(d.getMinutes()).padStart(2, "0");
+      return `${h}:${m}`;
+    }
+    return "";
+  }
+  if (value instanceof Date) {
+    const h = String(value.getHours()).padStart(2, "0");
+    const m = String(value.getMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
+  }
+  // Firestore Timestamp support (if present but typed as unknown)
+  // @ts-ignore
+  if (value && typeof value.toDate === "function") {
+    // @ts-ignore
+    const d: Date = value.toDate();
+    const h = String(d.getHours()).padStart(2, "0");
+    const m = String(d.getMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
+  }
+  return "";
+}
+
 const AddExercise = ({ editingExercise, setEditingExercise }) => {
   const { t } = useTranslation();
 
@@ -36,6 +75,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
   const [formData, setFormData] = useState<Omit<Exercise, "id">>({
     name: "",
     status: "planned",
+    // store time as "HH:mm" or "" (empty means optional)
     timeToStart: "",
     numberOfLanes: 1,
     type: "strength",
@@ -44,7 +84,11 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
   useEffect(() => {
     if (editingExercise) {
       const { id, ...rest } = editingExercise;
-      setFormData(rest);
+      setFormData({
+        ...rest,
+        // normalize any previous datetime to HH:mm for the input
+        timeToStart: normalizeToHHmm(rest.timeToStart),
+      });
       setIsDialogOpen(true);
     }
   }, [editingExercise]);
@@ -62,18 +106,20 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const payload = {
+      ...formData,
+      // persist null if empty to make the field truly optional in Firestore
+      timeToStart: formData.timeToStart ? formData.timeToStart : null,
+    };
+
     try {
       if (editingExercise) {
-        // Update existing exercise
-        await updateDoc(doc(db, "exercises", editingExercise.id), {
-          ...formData,
-        });
-        toast.success("Exercise updated");
+        await updateDoc(doc(db, "exercises", editingExercise.id), payload);
+        toast.success(t("ExerciseUpdated") ?? "Exercise updated");
         setEditingExercise(null);
       } else {
-        // Create exercise
         const exerciseRef = await addDoc(collection(db, "exercises"), {
-          ...formData,
+          ...payload,
           createdAt: serverTimestamp(),
         });
 
@@ -86,14 +132,14 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
           });
         }
 
-        toast.success("Exercise added");
+        toast.success(t("ExerciseAdded") ?? "Exercise added");
       }
 
       setIsDialogOpen(false);
       resetForm();
     } catch (err) {
       console.error(err);
-      toast.error("Error saving exercise");
+      toast.error(t("ErrorSavingExercise") ?? "Error saving exercise");
     }
   };
 
@@ -104,6 +150,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
           onClick={() => {
             resetForm();
             setEditingExercise(null);
+            setIsDialogOpen(true);
           }}
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -153,20 +200,25 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
             </select>
           </div>
 
-          {/* Time */}
+          {/* Time (optional, HH:mm only) */}
           <div>
-            <Label htmlFor="timeToStart">{t("TimeToStart")}</Label>
+            <Label htmlFor="timeToStart">
+              {t("TimeToStart")}{" "}
+              <span className="text-gray-400">
+                ({t("Optional") ?? "optional"})
+              </span>
+            </Label>
             <Input
               id="timeToStart"
-              type="datetime-local"
-              value={formData.timeToStart}
+              type="time"
+              value={formData.timeToStart ?? ""}
               onChange={(e) =>
                 setFormData((prev) => ({
                   ...prev,
-                  timeToStart: e.target.value,
+                  timeToStart: e.target.value, // expect "HH:mm" or ""
                 }))
               }
-              required
+              // no required → optional
             />
           </div>
 
