@@ -36,4 +36,5 @@ export interface LaneModel {
   competitor: Competitor | null;
   readyUp: Competitor | null;
   laneDocId?: string;
+  locked?: boolean;
 }

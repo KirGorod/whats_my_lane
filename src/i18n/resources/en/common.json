@@ -64,5 +64,6 @@
   "handle": "Handle",
   "defaultRowing": "Default",
   "laneTypeSelect.jerk": "Jerk",
-  "laneTypeSelect.bench": "Bench"
+  "laneTypeSelect.bench": "Bench",
+  "LaneLocked": "Lane Locked"
 }

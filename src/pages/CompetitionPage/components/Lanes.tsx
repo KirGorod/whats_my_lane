@@ -156,6 +156,7 @@ export default function Lanes({
         category: laneTypeToAssign, // mirror for back-compat
         competitor: null,
         readyUp: null,
+        locked: false,
         createdAt: serverTimestamp(),
       });
     } catch (err) {

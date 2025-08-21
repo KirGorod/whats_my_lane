@@ -8,7 +8,15 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { db } from "../../../firebase";
-import { Clock, Play, Trash2, Flag } from "lucide-react";
+import {
+  Lock,
+  Clock,
+  Play,
+  Trash2,
+  Flag,
+  Unlock,
+  ShieldAlert,
+} from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { toast } from "sonner";
 import {
@@ -80,10 +88,40 @@ export default function Lane({
     }
   };
 
+  const toggleLock = async () => {
+    try {
+      await updateDoc(
+        doc(db, "exercises", exerciseId, "lanes", lane.laneDocId as string),
+        {
+          locked: !lane.locked,
+        }
+      );
+      toast.success(!lane.locked ? t("LaneLocked") : t("LaneUnlocked"));
+    } catch (e) {
+      console.error("Toggle lock failed", e);
+      toast.error(t("Error"));
+    }
+  };
+
   const allowedCats = getAllowedCategoriesForLane(exerciseType, lane.laneType);
 
   return (
-    <Card key={lane.id} className="border border-gray-200 flex flex-col">
+    <Card
+      key={lane.id}
+      className="relative border border-gray-200 flex flex-col rounded-lg overflow-hidden"
+    >
+      {/* 🔴 Transparent red veil when locked */}
+      {lane.locked && (
+        <div className="pointer-events-none absolute inset-0 bg-red-500/40 backdrop-brightness-95 flex flex-col items-center justify-center text-black z-10">
+          <Lock className="w-16 h-16 mb-2" />
+          <span className="text-3xl font-bold">
+            {" "}
+            {/* bigger text */}
+            {t("LaneLocked")}
+          </span>
+        </div>
+      )}
+
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">
@@ -91,9 +129,31 @@ export default function Lane({
           </CardTitle>
 
           <div className="flex items-center gap-2">
+            {/* Icon-only lock/unlock for admin */}
+            {isAdmin && (
+              <Button
+                size="icon"
+                variant={lane.locked ? "destructive" : "outline"}
+                className="h-8 w-8"
+                onClick={toggleLock}
+                title={
+                  lane.locked
+                    ? t("UnlockLane", { defaultValue: "Unlock lane" })
+                    : t("LockLane", { defaultValue: "Lock lane" })
+                }
+              >
+                {lane.locked ? (
+                  <Unlock className="w-4 h-4" />
+                ) : (
+                  <Lock className="w-4 h-4" />
+                )}
+              </Button>
+            )}
+
+            {/* Lane type selector (admin) or badge (viewer) */}
             {isAdmin ? (
               <Select
-                disabled={!laneTypeOptions.length}
+                disabled={!laneTypeOptions.length || !!lane.competitor}
                 value={lane.laneType ?? ""}
                 onValueChange={(value) =>
                   updateLaneType(lane.laneDocId as string, value as LaneType)
@@ -193,7 +253,8 @@ export default function Lane({
             {t("Done")}
           </Button>
 
-          {!lane.competitor && !lane.readyUp && (
+          {/* hide remove when locked or occupied */}
+          {!lane.competitor && !lane.readyUp && !lane.locked && (
             <Button
               onClick={() => removeLane(lane.laneDocId as string)}
               size="icon"

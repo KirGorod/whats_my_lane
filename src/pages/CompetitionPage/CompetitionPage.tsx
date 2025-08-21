@@ -141,6 +141,7 @@ export default function CompetitionPage() {
           category: laneType, // mirror for back-compat
           competitor: data.competitor ?? null,
           readyUp: data.readyUp ?? null,
+          locked: !!data.locked,
         } as LaneModel;
       });
       setLanes(lanesData);
@@ -264,7 +265,10 @@ export default function CompetitionPage() {
     const waitingByCat = makeWaitingByCategory(waitingAll);
 
     // ---- 1) NOW (empty lanes) ----
-    const freeByType = groupLanesByType(lanes, (l) => !l.competitor);
+    const freeByType = groupLanesByType(
+      lanes,
+      (l) => !l.competitor && !l.locked
+    );
     for (const [laneType, freeLanes] of freeByType) {
       const priority = getAllowedCategoriesForLane(exerciseType, laneType);
       if (!priority.length) continue;
@@ -313,7 +317,7 @@ export default function CompetitionPage() {
     // ---- 2) READYUP (lanes with NOW but no READYUP) ----
     const needReadyByType = groupLanesByType(
       lanes,
-      (l) => !!l.competitor && !l.readyUp
+      (l) => !!l.competitor && !l.readyUp && !l.locked
     );
     for (const [laneType, needReady] of needReadyByType) {
       const priority = getAllowedCategoriesForLane(exerciseType, laneType);
@@ -549,6 +553,7 @@ export default function CompetitionPage() {
     const nowLane = lanes.find(
       (lane) =>
         lane.laneType &&
+        !lane.locked &&
         !lane.competitor &&
         isCategoryAllowedForLane(
           exerciseType,
@@ -561,6 +566,7 @@ export default function CompetitionPage() {
       ? lanes.find(
           (lane) =>
             lane.laneType &&
+            !lane.locked &&
             lane.competitor &&
             !lane.readyUp &&
             isCategoryAllowedForLane(
@@ -682,6 +688,7 @@ export default function CompetitionPage() {
     const availableLane = lanes.find(
       (lane) =>
         lane.laneType &&
+        !lane.locked &&
         lane.competitor === null &&
         lane.readyUp === null &&
         isCategoryAllowedForLane(

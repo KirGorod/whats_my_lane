@@ -64,5 +64,6 @@
   "handle": "Ручка",
   "defaultRowing": "Загальна",
   "laneTypeSelect.jerk": "Ривок",
-  "laneTypeSelect.bench": "Жим"
+  "laneTypeSelect.bench": "Жим",
+  "LaneLocked": "Заблоковано"
 }
