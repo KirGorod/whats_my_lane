@@ -549,6 +549,9 @@ export default function CompetitionPage() {
     for (const lane of lanes) {
       if (!lane.laneDocId) continue;
 
+      // 🔒 NEW: Skip locked lanes entirely
+      if (lane.locked) continue;
+
       const before = {
         competitor: lane.competitor ?? null,
         readyUp: lane.readyUp ?? null,
@@ -559,7 +562,7 @@ export default function CompetitionPage() {
         readyUp: null,
       };
 
-      // competitor status changes
+      // competitor status changes (only for unlocked lanes)
       if (lane.competitor) {
         compPatches.push({
           competitorId: lane.competitor.id,
@@ -583,9 +586,10 @@ export default function CompetitionPage() {
         );
       }
 
-      // ✅ apply nextLaneType if present
+      // ✅ apply nextLaneType if present (only for unlocked lanes)
       const applyType =
         !!lane.nextLaneType && lane.nextLaneType !== lane.laneType;
+
       const lref = doc(db, "exercises", exerciseId, "lanes", lane.laneDocId);
       batch.update(lref, {
         ...afterCore,
@@ -607,13 +611,15 @@ export default function CompetitionPage() {
           ...(applyType ? { laneType: lane.nextLaneType } : {}),
         } as any,
       });
+
       affected++;
     }
 
-    if (!affected)
+    if (!affected) {
       return toast.error(
         t("NoLanesToUpdate", { defaultValue: "No lanes to update" })
       );
+    }
 
     const actionRef = doc(collection(db, "exercises", exerciseId, "actions"));
     batch.set(actionRef, {
@@ -981,6 +987,156 @@ export default function CompetitionPage() {
     );
   };
 
+  // --- UPDATED: move competitor(s) back to waiting AT THE TOP ---
+  const returnCompetitorToWaiting = async (
+    laneId: number,
+    slot: "now" | "readyUp"
+  ) => {
+    if (!exerciseId) return;
+    const lane = lanes.find((l) => l.id === laneId);
+    if (!lane || !lane.laneDocId) return toast.error("Lane not found");
+    if (lane.locked) return toast.error("Lane is locked");
+
+    try {
+      await runTransaction(db, async (tx) => {
+        const lref = doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!);
+        const mref = doc(db, "exercises", exerciseId, "meta", "ordering"); // counter holder
+
+        const ls = await tx.get(lref);
+        if (!ls.exists()) throw new Error("Lane disappeared");
+        const data = ls.data() as any;
+
+        // Ensure meta doc exists and read current counter
+        const ms = await tx.get(mref);
+        let topCounter = 0;
+        if (ms.exists()) {
+          const md = ms.data() as any;
+          topCounter = Number(md.topCounter ?? 0);
+        }
+
+        const before = {
+          competitor: data.competitor ?? null,
+          readyUp: data.readyUp ?? null,
+        };
+
+        const lanePatches: LanePatch[] = [];
+        const compPatches: CompetitorPatch[] = [];
+
+        if (slot === "now") {
+          if (!data.competitor) throw new Error("No competitor in NOW");
+
+          // Decrement counter for NOW-returned competitor
+          topCounter -= 1;
+          const compNowId = data.competitor.id;
+          tx.update(
+            doc(db, "exercises", exerciseId, "competitors", compNowId),
+            { status: "waiting", orderRank: topCounter }
+          );
+          compPatches.push({
+            competitorId: compNowId,
+            beforeStatus: "lane",
+            afterStatus: "waiting",
+          });
+
+          // Promote READYUP to NOW if exists
+          let after: { competitor: any; readyUp: any } = {
+            competitor: null,
+            readyUp: null,
+          };
+
+          if (data.readyUp) {
+            const readyId = data.readyUp.id;
+            after = { competitor: { ...data.readyUp }, readyUp: null };
+
+            tx.update(
+              doc(db, "exercises", exerciseId, "competitors", readyId),
+              { status: "lane" }
+            );
+            compPatches.push({
+              competitorId: readyId,
+              beforeStatus: "ready",
+              afterStatus: "lane",
+            });
+          }
+
+          // Persist lane change
+          tx.update(lref, after);
+
+          // Save the updated counter
+          tx.set(mref, { topCounter }, { merge: true });
+
+          lanePatches.push({
+            laneDocId: lane.laneDocId!,
+            laneId: lane.id,
+            before,
+            after,
+          });
+        } else {
+          // slot === "readyUp"
+          if (!data.readyUp) throw new Error("No competitor in READY UP");
+
+          // Decrement counter for READYUP-returned competitor
+          topCounter -= 1;
+          const readyId = data.readyUp.id;
+          tx.update(doc(db, "exercises", exerciseId, "competitors", readyId), {
+            status: "waiting",
+            orderRank: topCounter,
+          });
+          compPatches.push({
+            competitorId: readyId,
+            beforeStatus: "ready",
+            afterStatus: "waiting",
+          });
+
+          const after = {
+            competitor: data.competitor ?? null,
+            readyUp: null,
+          };
+
+          tx.update(lref, after);
+
+          // Save the updated counter
+          tx.set(mref, { topCounter }, { merge: true });
+
+          lanePatches.push({
+            laneDocId: lane.laneDocId!,
+            laneId: lane.id,
+            before,
+            after,
+          });
+        }
+
+        // History
+        const actionRef = doc(
+          collection(db, "exercises", exerciseId, "actions")
+        );
+        const action: ActionHistory = {
+          action: "returnToWaiting",
+          createdAt: serverTimestamp(),
+          createdBy: null,
+          lanes: lanePatches,
+          competitors: compPatches,
+          undone: false,
+        };
+        tx.set(actionRef, action);
+      });
+
+      toast.success(
+        slot === "now"
+          ? "Moved NOW competitor to top of waiting"
+          : "Moved READY UP competitor to top of waiting"
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to return competitor to waiting");
+    }
+  };
+
+  const returnFromNow = (laneId: number) =>
+    returnCompetitorToWaiting(laneId, "now");
+  const returnFromReadyUp = (laneId: number) =>
+    returnCompetitorToWaiting(laneId, "readyUp");
+
   if (!exerciseId) {
     return <p className="p-6 text-gray-500">Invalid competition</p>;
   }
@@ -1016,6 +1172,8 @@ export default function CompetitionPage() {
             autoFillLanes={autoFillLanes}
             clearLane={clearLane}
             clearAllLanes={clearAllLanes}
+            returnFromNow={returnFromNow}
+            returnFromReadyUp={returnFromReadyUp}
           />
         </div>
 

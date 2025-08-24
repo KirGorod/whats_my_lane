@@ -8,16 +8,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { db } from "../../../firebase";
-import {
-  Lock,
-  Clock,
-  Play,
-  Trash2,
-  Flag,
-  Unlock,
-  ShieldAlert,
-  ArrowRight,
-} from "lucide-react";
+import { Lock, Trash2, Unlock, ArrowLeft } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { toast } from "sonner";
 import {
@@ -53,6 +44,9 @@ export default function Lane({
   exerciseType,
   isPending = false,
   onDone,
+  // NEW callbacks
+  onReturnFromNow,
+  onReturnFromReadyUp,
 }: {
   lane: LaneModel;
   exerciseId: string;
@@ -61,6 +55,8 @@ export default function Lane({
   exerciseType: ExerciseType;
   isPending?: boolean;
   onDone?: () => void;
+  onReturnFromNow: () => void;
+  onReturnFromReadyUp: () => void;
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
@@ -81,7 +77,6 @@ export default function Lane({
     }
   };
 
-  // change CURRENT lane type immediately (blocked if competitor present)
   const updateLaneType = async (laneDocId: string, newLaneType: LaneType) => {
     if (lane.competitor) {
       toast.warning(
@@ -101,7 +96,6 @@ export default function Lane({
     }
   };
 
-  // set NEXT-ROUND lane type (allowed even if occupied)
   const updateNextLaneType = async (
     laneDocId: string,
     newLaneType: LaneType
@@ -110,14 +104,9 @@ export default function Lane({
       await updateDoc(doc(db, "exercises", exerciseId, "lanes", laneDocId), {
         nextLaneType: newLaneType,
       });
-      toast.success(
-        t("NextRoundLaneTypeSet", {
-          defaultValue: "Next round lane type scheduled",
-        })
-      );
+      // keep it quiet or toast?
     } catch (err) {
       console.error("Error updating nextLaneType", err);
-      toast.error(t("Error"));
     }
   };
 
@@ -129,10 +118,8 @@ export default function Lane({
           nextLaneType: null,
         }
       );
-      toast.success(t("Cleared", { defaultValue: "Cleared" }));
     } catch (e) {
       console.error(e);
-      toast.error(t("Error"));
     }
   };
 
@@ -142,10 +129,9 @@ export default function Lane({
         doc(db, "exercises", exerciseId, "lanes", lane.laneDocId as string),
         { locked: !lane.locked }
       );
-      toast.success(!lane.locked ? t("LaneLocked") : t("LaneUnlocked"));
+      // toasts are elsewhere already
     } catch (e) {
       console.error("Toggle lock failed", e);
-      toast.error(t("Error"));
     }
   };
 
@@ -161,7 +147,6 @@ export default function Lane({
       aria-busy={isPending}
       aria-disabled={isPending}
     >
-      {/* Locked overlay */}
       {lane.locked && (
         <div className="pointer-events-none absolute inset-0 bg-red-500/40 backdrop-brightness-95 flex flex-col items-center justify-center text-black z-10">
           <Lock className="w-16 h-16 mb-2" />
@@ -169,7 +154,6 @@ export default function Lane({
         </div>
       )}
 
-      {/* Busy overlay */}
       {isPending && (
         <div className="absolute inset-0 z-10 pointer-events-auto flex items-center justify-center">
           <div className="absolute inset-0 bg-white/20" />
@@ -207,7 +191,6 @@ export default function Lane({
               </Button>
             )}
 
-            {/* CURRENT lane type (same as before) */}
             {isAdmin ? (
               <Select
                 disabled={
@@ -305,7 +288,19 @@ export default function Lane({
         {/* Now */}
         <div className="bg-green-200 border border-green-400 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
           <div className="flex items-center gap-2">
-            <Play className="w-4 h-4 text-green-600" />
+            {isAdmin && lane.competitor && !isPending && !lane.locked && (
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-7 w-7"
+                title={t("ReturnToWaiting", {
+                  defaultValue: "Return to waiting",
+                })}
+                onClick={onReturnFromNow}
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            )}
             <span className="text-sm font-medium text-green-800">
               {t("Now")}
             </span>
@@ -329,7 +324,19 @@ export default function Lane({
         {/* Ready Up */}
         <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-yellow-600" />
+            {isAdmin && lane.readyUp && !isPending && !lane.locked && (
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-7 w-7"
+                title={t("ReturnToWaiting", {
+                  defaultValue: "Return to waiting",
+                })}
+                onClick={onReturnFromReadyUp}
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            )}
             <span className="text-sm font-medium text-yellow-800">
               {t("ReadyUp")}
             </span>
@@ -359,7 +366,6 @@ export default function Lane({
             className="flex items-center justify-center gap-1 flex-1 disabled:opacity-50 disabled:pointer-events-none"
             disabled={isPending}
           >
-            <Flag className="w-4 h-4" />
             {t("Done")}
           </Button>
 

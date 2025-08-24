@@ -42,6 +42,11 @@ interface Props {
   clearLane: (laneId: number) => void;
   clearAllLanes: () => void;
   exerciseId: string;
+
+  /** Move NOW competitor back to waiting (top). */
+  returnFromNow: (laneId: number) => Promise<void>;
+  /** Move READY UP competitor back to waiting (top). */
+  returnFromReadyUp: (laneId: number) => Promise<void>;
 }
 
 // Normalize legacy exercise types to the new ones
@@ -61,23 +66,51 @@ export default function Lanes({
   clearLane,
   clearAllLanes,
   exerciseId,
+  returnFromNow,
+  returnFromReadyUp,
 }: Props) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [exerciseType, setExerciseType] = useState<ExerciseType>("bench");
   const [undoBusy, setUndoBusy] = useState(false);
+
+  // Tracks in-flight operations per-lane to lock/grey-out those lanes.
   const [pendingLaneIds, setPendingLaneIds] = useState<Set<number>>(new Set());
 
+  const setLanePending = (laneId: number, pending: boolean) => {
+    setPendingLaneIds((prev) => {
+      const next = new Set(prev);
+      if (pending) next.add(laneId);
+      else next.delete(laneId);
+      return next;
+    });
+  };
+
   const handleDone = async (laneId: number) => {
-    setPendingLaneIds((prev) => new Set(prev).add(laneId));
+    setLanePending(laneId, true);
     try {
       await Promise.resolve(clearLane(laneId));
     } finally {
-      setPendingLaneIds((prev) => {
-        const next = new Set(prev);
-        next.delete(laneId);
-        return next;
-      });
+      setLanePending(laneId, false);
+    }
+  };
+
+  // NEW: wrap return actions with the same pending/lock behavior
+  const handleReturnFromNow = async (laneId: number) => {
+    setLanePending(laneId, true);
+    try {
+      await returnFromNow(laneId);
+    } finally {
+      setLanePending(laneId, false);
+    }
+  };
+
+  const handleReturnFromReadyUp = async (laneId: number) => {
+    setLanePending(laneId, true);
+    try {
+      await returnFromReadyUp(laneId);
+    } finally {
+      setLanePending(laneId, false);
     }
   };
 
@@ -110,8 +143,6 @@ export default function Lanes({
       const docSnap = snap.docs[0];
       const action = docSnap.data() as ActionHistory;
 
-      // Best-effort revert in one batch.
-      // (If you want strict protection, do this in a transaction and verify current == action.after.)
       const batch = writeBatch(db);
 
       for (const lp of action.lanes) {
@@ -138,7 +169,7 @@ export default function Lanes({
     }
   };
 
-  // Options for the Select: mapping or fallback to all lane types (so it's never empty)
+  // Options for the Select: mapping or fallback to all lane types (never empty)
   const laneTypeOptions = useMemo<LaneType[]>(() => {
     const opts = LANE_TYPES_BY_EXERCISE[exerciseType] ?? [];
     return opts.length ? opts : (LANE_TYPES as unknown as LaneType[]);
@@ -167,7 +198,7 @@ export default function Lanes({
         id: newId,
         laneType: laneTypeToAssign,
         category: laneTypeToAssign, // mirror for back-compat
-        nextLaneType: null, // ✅ NEW
+        nextLaneType: null,
         competitor: null,
         readyUp: null,
         locked: false,
@@ -275,6 +306,9 @@ export default function Lanes({
             clearLane={clearLane}
             laneTypeOptions={laneTypeOptions}
             exerciseType={exerciseType}
+            // Arrow actions wrapped to lock lane while processing
+            onReturnFromNow={() => handleReturnFromNow(lane.id)}
+            onReturnFromReadyUp={() => handleReturnFromReadyUp(lane.id)}
           />
         ))}
       </div>
