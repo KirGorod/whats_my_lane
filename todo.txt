@@ -1,0 +1,2 @@
+1. Don't block lanes with active competitors
+2. Add feature to move user from lane to competitors
