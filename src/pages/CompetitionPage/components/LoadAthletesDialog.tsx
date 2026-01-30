@@ -68,6 +68,9 @@ const BASE_URL = "https://apitrenvet.allstrongman.com/api";
 const normalizeCategory = (raw?: string | null) =>
   (raw ?? "").trim().toLowerCase();
 
+const isFemaleCompetition = (comp?: ApiCompetition) =>
+  (comp?.title ?? "").toUpperCase().includes("ЖІНКИ");
+
 const formatDate = (iso?: string) => {
   if (!iso) return "";
   const d = new Date(iso);
@@ -91,7 +94,9 @@ export default function LoadAthletesDialog({
   const [selectedCompetitionIds, setSelectedCompetitionIds] = useState<
     Set<string>
   >(new Set());
-  const [fallbackCategory, setFallbackCategory] = useState("r0");
+  const [fallbackCategory, setFallbackCategory] = useState("h1");
+  const [excludeWomen, setExcludeWomen] = useState(true);
+  const [missingCategories, setMissingCategories] = useState<string[]>([]);
 
   const [preview, setPreview] = useState<PreviewAthlete[]>([]);
   const [loadingLeagues, setLoadingLeagues] = useState(false);
@@ -118,7 +123,7 @@ export default function LoadAthletesDialog({
   useEffect(() => {
     if (!selectedLeague || !selectedExercise) return;
     void loadCompetitions(selectedLeague, selectedExercise);
-  }, [selectedLeague, selectedExercise]);
+  }, [selectedLeague, selectedExercise, excludeWomen]);
 
   const loadLeagues = async () => {
     setLoadingLeagues(true);
@@ -143,9 +148,10 @@ export default function LoadAthletesDialog({
     setCompetitions([]);
     setSelectedCompetitionIds(new Set());
     setPreview([]);
+    setMissingCategories([]);
     try {
       const all: ApiCompetition[] = [];
-      for (let page = 0; page < 5; page++) {
+      for (let page = 0; page < 30; page++) {
         const url = `${BASE_URL}/competitions?filter=&parentCompetitionId=${leagueId}&size=10&page=${page}`;
         console.log(url);
         const res = await fetch(url);
@@ -153,19 +159,39 @@ export default function LoadAthletesDialog({
         const data = await res.json();
         const comps: ApiCompetition[] = data?.competitions ?? [];
         all.push(...comps);
-        if (!comps.length || comps.length < 10) break; // last page
+
+        // Stop when API returns empty page (no more data) or when we hit the natural last page (< page size)
+        if (!comps.length || comps.length < 10) break;
       }
       console.log("competitions count:", all.length);
-      const comps = all;
+      const comps = all.filter(
+        (c) => !excludeWomen || !isFemaleCompetition(c)
+      );
       // filter to matching exercise if present; otherwise show all
       const matches = comps.filter((c) =>
         (c.exercises ?? []).some((ex) => ex.identifier === exerciseId)
       );
-      const visible = matches.length ? matches : comps;
-      const preselected = matches.length ? matches : [];
+      const visible = (matches.length ? matches : comps).sort(
+        (a, b) => Number(isFemaleCompetition(a)) - Number(isFemaleCompetition(b))
+      );
+      const preselected = matches.length ? matches : comps;
+      const requiredCategories = COMPETITOR_CATEGORIES.filter(
+        (cat) => !cat.toLowerCase().startsWith("w")
+      );
+      const presentCategories = new Set<string>();
+      visible.forEach((c) => {
+        const cat =
+          normalizeCategory(c.limitationGroup) ||
+          normalizeCategory(fallbackCategory);
+        if (cat && !cat.startsWith("w")) presentCategories.add(cat);
+      });
+      const missing = requiredCategories.filter(
+        (cat) => !presentCategories.has(cat.toLowerCase())
+      );
 
       setCompetitions(visible);
       setSelectedCompetitionIds(new Set(preselected.map((c) => c.id)));
+      setMissingCategories(missing);
     } catch (err) {
       console.error(err);
       toast.error("Не вдалося завантажити під-турніри");
@@ -257,6 +283,10 @@ export default function LoadAthletesDialog({
 
   const saveCompetitors = async () => {
     if (!preview.length) return toast.error("Немає кого додавати");
+    const confirmed = window.confirm(
+      `Are you sure you want to add ${preview.length} competitors?`
+    );
+    if (!confirmed) return;
     setSaving(true);
     try {
       const payload = preview.map((p) => ({
@@ -287,7 +317,7 @@ export default function LoadAthletesDialog({
     if (!val) {
       setPreview([]);
       setSelectedCompetitionIds(new Set());
-      setFallbackCategory("r0");
+      setFallbackCategory("h1");
     }
   };
 
@@ -309,7 +339,7 @@ export default function LoadAthletesDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-3">
             <div className="space-y-1">
               <p className="text-sm font-medium">Ліга</p>
               <Select
@@ -357,28 +387,16 @@ export default function LoadAthletesDialog({
               </Select>
             </div>
 
-            <div className="space-y-1 sm:col-span-2">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Категорія за замовчуванням</p>
-                <span className="text-xs text-muted-foreground">
-                  Використаємо, якщо в під-турнірі нема limitationGroup
-                </span>
-              </div>
-              <Select
-                value={fallbackCategory}
-                onValueChange={(v) => setFallbackCategory(v)}
-              >
-                <SelectTrigger className="w-full justify-between">
-                  <SelectValue placeholder="Не вибрано" className="truncate" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMPETITOR_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground select-none">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-amber-600"
+                  checked={excludeWomen}
+                  onChange={(e) => setExcludeWomen(e.target.checked)}
+                />
+                <span>Без жінок</span>
+              </label>
             </div>
           </div>
 
@@ -387,35 +405,61 @@ export default function LoadAthletesDialog({
               <p className="text-sm font-medium">
                 Під-турніри ({competitions.length})
               </p>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>
-                  Обрано: {selectedCompetitionIds.size}/{competitions.length}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    disabled={!competitions.length}
-                    onClick={() =>
-                      setSelectedCompetitionIds(
-                        new Set(competitions.map((c) => c.id))
-                      )
-                    }
-                  >
-                    Вибрати всі
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    disabled={!selectedCompetitionIds.size}
-                    onClick={() => setSelectedCompetitionIds(new Set())}
-                  >
-                    Скинути
-                  </Button>
-                </div>
-              </div>
+              <span className="text-xs text-muted-foreground">
+                Обрано: {selectedCompetitionIds.size}/{competitions.length}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!competitions.length}
+                onClick={() =>
+                  setSelectedCompetitionIds(new Set(competitions.map((c) => c.id)))
+                }
+              >
+                Вибрати всі
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!selectedCompetitionIds.size}
+                onClick={() => setSelectedCompetitionIds(new Set())}
+              >
+                Скинути
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!competitions.length}
+                onClick={() =>
+                  setSelectedCompetitionIds(
+                    new Set(
+                      competitions
+                        .filter((c) => !isFemaleCompetition(c))
+                        .map((c) => c.id)
+                    )
+                  )
+                }
+              >
+                Тільки чоловіки
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!competitions.length}
+                onClick={() =>
+                  setSelectedCompetitionIds(
+                    new Set(
+                      competitions
+                        .filter((c) => isFemaleCompetition(c))
+                        .map((c) => c.id)
+                    )
+                  )
+                }
+              >
+                Тільки жінки
+              </Button>
             </div>
             {competitions.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -494,6 +538,29 @@ export default function LoadAthletesDialog({
                 </Button>
               )}
             </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Категорія за замовчуванням</p>
+                <span className="text-xs text-muted-foreground">
+                  Використаємо, якщо в під-турнірі нема limitationGroup
+                </span>
+              </div>
+              <Select
+                value={fallbackCategory}
+                onValueChange={(v) => setFallbackCategory(v)}
+              >
+                <SelectTrigger className="w-full justify-between">
+                  <SelectValue placeholder="Не вибрано" className="truncate" />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMPETITOR_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {preview.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Після завантаження атлети з'являться тут. Їх можна прибрати перед
@@ -526,6 +593,12 @@ export default function LoadAthletesDialog({
                   </div>
                 ))}
               </div>
+            )}
+            {missingCategories.length > 0 && (
+              <p className="text-sm text-red-600">
+                Warning: Missing categories for this exercise:{" "}
+                {missingCategories.join(", ")}
+              </p>
             )}
           </div>
         </div>
