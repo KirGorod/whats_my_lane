@@ -224,19 +224,31 @@ export default function CompetitionPage() {
   }
 
   function makeWaitingByCategory(waiting: Competitor[]) {
-    const m = new Map<string, Competitor[]>();
+    // Keep women (isFemale) as a fallback queue so they are used only when no other competitors remain for the category
+    const m = new Map<
+      string,
+      { primary: Competitor[]; femaleFallback: Competitor[] }
+    >();
+
     for (const c of waiting) {
-      const arr = m.get(c.category) ?? [];
-      arr.push(c); // your waiting list is already ordered by orderRank asc
-      m.set(c.category, arr);
+      const bucket =
+        m.get(c.category) ?? { primary: [], femaleFallback: [] };
+      if (c.isFemale) bucket.femaleFallback.push(c);
+      else bucket.primary.push(c);
+      m.set(c.category, bucket);
     }
+
     return {
       pop(cat: string): Competitor | undefined {
-        const arr = m.get(cat);
-        if (!arr?.length) return undefined;
-        const c = arr.shift()!;
-        if (arr.length) m.set(cat, arr);
-        else m.delete(cat);
+        const bucket = m.get(cat);
+        if (!bucket) return undefined;
+
+        const c = bucket.primary.shift() ?? bucket.femaleFallback.shift();
+        if (!bucket.primary.length && !bucket.femaleFallback.length) {
+          m.delete(cat);
+        } else {
+          m.set(cat, bucket);
+        }
         return c;
       },
     };

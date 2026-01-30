@@ -24,4 +24,5 @@ export interface Competitor {
   orderRank?: number;
   order?: number;
   lane?: number | null;
+  isFemale?: boolean;
 }
