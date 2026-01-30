@@ -4,6 +4,7 @@ import {
   addDoc,
   serverTimestamp,
   doc,
+  updateDoc,
   onSnapshot,
   writeBatch,
   getDocs,
@@ -309,6 +310,30 @@ export default function Lanes({
             // Arrow actions wrapped to lock lane while processing
             onReturnFromNow={() => handleReturnFromNow(lane.id)}
             onReturnFromReadyUp={() => handleReturnFromReadyUp(lane.id)}
+            onAddBot={async (laneModel, data) => {
+              setPendingLaneIds((prev) => new Set(prev).add(laneModel.id));
+              try {
+                const bot = {
+                  id: `bot-${Date.now()}`,
+                  name: "Пропуск",
+                  category: data.category,
+                  isBot: true,
+                };
+                const updates: any = {};
+                if (data.target === "competitor") updates.competitor = bot;
+                else updates.readyUp = bot;
+                await updateDoc(
+                  doc(db, "exercises", exerciseId, "lanes", laneModel.laneDocId!),
+                  updates
+                );
+              } finally {
+                setPendingLaneIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(laneModel.id);
+                  return next;
+                });
+              }
+            }}
           />
         ))}
       </div>

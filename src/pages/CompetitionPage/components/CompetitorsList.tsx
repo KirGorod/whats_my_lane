@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import AddCompetitorDialog from "./AddCompetitorDialog";
 import UploadCompetitorsCSV from "./UploadCompetitorsCSV";
-import { Users, Search, Plus, Upload, AlertCircle } from "lucide-react";
+import LoadAthletesDialog from "./LoadAthletesDialog";
+import { Users, Search, Plus, FileUp, AlertCircle, Download, Trash2, RotateCcw } from "lucide-react";
 import { Input } from "../../../components/ui/input";
+import { Button } from "../../../components/ui/button";
 import CompetitorCard from "./CompetitorCard";
 import { toast } from "sonner";
 import { db } from "../../../firebase";
@@ -87,12 +89,20 @@ const CompetitorsList = ({
   competitors,
   removeCompetitor,
   addCompetitor,
+  addCompetitorsBulk,
+  removeAllCompetitors,
+  undoRemoveAllCompetitors,
   fillLaneWithCompetitor,
 }: {
   exerciseId: string;
   competitors: Competitor[]; // ordered by orderRank asc from parent
   removeCompetitor: (c: Competitor) => Promise<void> | void;
   addCompetitor: (c: Omit<Competitor, "id">) => Promise<void> | void;
+  addCompetitorsBulk?: (
+    c: Array<Omit<Competitor, "id">>
+  ) => Promise<void> | void;
+  removeAllCompetitors?: () => Promise<void> | void;
+  undoRemoveAllCompetitors?: () => Promise<void> | void;
   fillLaneWithCompetitor: (c: Competitor) => Promise<void> | void;
 }) => {
   const { t } = useTranslation();
@@ -196,15 +206,40 @@ const CompetitorsList = ({
   const handleRemove = (c: Competitor) =>
     withPending(c.id, () => removeCompetitor(c))();
 
+  const handleRemoveAll = async () => {
+    if (!removeAllCompetitors) return;
+    const confirm = window.prompt(
+      "Введіть 'remove' або 'видалити' щоб підтвердити видалення ВСІХ учасників"
+    );
+    if (!confirm) return;
+    const ok =
+      confirm.trim().toLowerCase() === "remove" ||
+      confirm.trim().toLowerCase() === "видалити";
+    if (!ok) {
+      toast.error("Потрібно ввести 'remove' або 'видалити'");
+      return;
+    }
+    await removeAllCompetitors();
+  };
+
+  const handleUndoRemoveAll = async () => {
+    if (!undoRemoveAllCompetitors) return;
+    const ok = window.confirm("Відновити останніх видалених учасників?");
+    if (!ok) return;
+    await undoRemoveAllCompetitors();
+  };
+
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-        <div className="hidden lg:flex items-center gap-2">
-          <Users className="w-5 h-5 text-gray-600" />
-          <h2 className="text-lg font-semibold">
-            {t("Competitors")} ({competitors.length})
-          </h2>
+      <div className="p-4 border-b border-gray-200 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-gray-600" />
+            <h2 className="text-lg font-semibold">
+              {t("Competitors")} ({competitors.length})
+            </h2>
+          </div>
         </div>
 
         {isAdmin && (
@@ -214,11 +249,36 @@ const CompetitorsList = ({
               triggerButtonClass="p-2 rounded-full hover:bg-gray-100"
               triggerIcon={<Plus className="w-5 h-5 text-blue-600" />}
             />
+            <LoadAthletesDialog
+              addCompetitor={addCompetitor}
+              addCompetitorsBulk={addCompetitorsBulk}
+              triggerButtonClass="p-2 rounded-full hover:bg-gray-100"
+              triggerIcon={<Download className="w-5 h-5 text-amber-600" />}
+            />
             <UploadCompetitorsCSV
               exerciseId={exerciseId}
               triggerButtonClass="p-2 rounded-full hover:bg-gray-100"
-              triggerIcon={<Upload className="w-5 h-5 text-green-600" />}
+              triggerIcon={<FileUp className="w-5 h-5 text-green-600" />}
             />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-red-600 hover:text-red-800"
+              title="Видалити всіх"
+              onClick={handleRemoveAll}
+            >
+              <Trash2 className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-blue-600 hover:text-blue-800"
+              title="Відмінити останнє видалення"
+              onClick={handleUndoRemoveAll}
+              disabled={!undoRemoveAllCompetitors}
+            >
+              <RotateCcw className="w-5 h-5" />
+            </Button>
           </div>
         )}
       </div>

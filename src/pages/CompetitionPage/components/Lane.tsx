@@ -22,6 +22,7 @@ import type { ExerciseType } from "../../../types/exercise";
 import type { LaneModel, LaneType } from "../../../types/lane";
 import { getAllowedCategoriesForLane } from "../../../utils/laneRules";
 import { useTranslation } from "react-i18next";
+import { Bot } from "lucide-react";
 
 function badgeClass(laneType: LaneType | null) {
   switch (laneType) {
@@ -47,6 +48,7 @@ export default function Lane({
   // NEW callbacks
   onReturnFromNow,
   onReturnFromReadyUp,
+  onAddBot,
 }: {
   lane: LaneModel;
   exerciseId: string;
@@ -57,6 +59,10 @@ export default function Lane({
   onDone?: () => void;
   onReturnFromNow: () => void;
   onReturnFromReadyUp: () => void;
+  onAddBot: (
+    lane: LaneModel,
+    data: { category: string; target: "competitor" | "readyUp" }
+  ) => void | Promise<void>;
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
@@ -136,6 +142,32 @@ export default function Lane({
   };
 
   const allowedCats = getAllowedCategoriesForLane(exerciseType, lane.laneType);
+  const nextAllowedCats = lane.nextLaneType
+    ? getAllowedCategoriesForLane(exerciseType, lane.nextLaneType)
+    : [];
+
+  const handleAddBot = async () => {
+    const hasCompetitor = !!lane.competitor;
+    const pickFromNext = hasCompetitor && !!nextAllowedCats.length;
+    const candidates = pickFromNext
+      ? nextAllowedCats
+      : allowedCats.length
+      ? allowedCats
+      : [];
+
+    const cat = candidates[0];
+    if (!cat) {
+      toast.error("Немає доступних категорій для бота");
+      return;
+    }
+    if (hasCompetitor && !lane.nextLaneType) {
+      toast.error("Оберіть тип наступного раунду, щоб додати бота");
+      return;
+    }
+    const target: "competitor" | "readyUp" = hasCompetitor ? "readyUp" : "competitor";
+    await onAddBot(lane, { category: cat, target });
+    toast.success(`Додано бота у категорії ${cat.toUpperCase()}`);
+  };
 
   return (
     <Card
@@ -360,6 +392,16 @@ export default function Lane({
 
       {isAdmin && (
         <div className="flex items-center justify-between gap-2 px-4 pb-3">
+          <Button
+            onClick={handleAddBot}
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 disabled:opacity-50 disabled:pointer-events-none"
+            disabled={isPending || lane.locked}
+            title="Додати бота (Пропуск)"
+          >
+            <Bot className="w-4 h-4" />
+          </Button>
           <Button
             onClick={onDone ? onDone : () => clearLane(lane.id)}
             size="sm"

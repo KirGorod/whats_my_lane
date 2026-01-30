@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import Papa from "papaparse";
 import {
   Dialog,
@@ -18,17 +18,27 @@ import {
   serverTimestamp,
   writeBatch,
 } from "firebase/firestore";
-import { Upload } from "lucide-react";
+import { FileUp } from "lucide-react";
 import { COMPETITOR_CATEGORIES } from "../../../types/competitor";
 
 type Row = { name?: string; category?: string };
 
+type UploadCompetitorsCSVProps = {
+  exerciseId: string;
+  triggerButtonClass?: string;
+  triggerIcon?: ReactNode;
+};
+
 export default function UploadCompetitorsCSV({
   exerciseId,
-}: {
-  exerciseId: string;
-}) {
+  triggerButtonClass,
+  triggerIcon,
+}: UploadCompetitorsCSVProps) {
   const [open, setOpen] = useState(false);
+  const defaultTriggerIcon = useMemo(
+    () => <FileUp className="w-5 h-5" />,
+    []
+  );
 
   const normalizeCategory = (raw?: string) => {
     if (!raw) return "";
@@ -131,10 +141,10 @@ export default function UploadCompetitorsCSV({
         <Button
           variant="ghost"
           size="icon"
-          className="text-green-600 hover:text-green-800"
+          className={triggerButtonClass ?? "text-green-600 hover:text-green-800"}
           title="Upload competitors CSV"
         >
-          <Upload className="w-5 h-5" />
+          {triggerIcon ?? defaultTriggerIcon}
         </Button>
       </DialogTrigger>
       <DialogContent>

@@ -17,6 +17,8 @@ import {
   orderBy,
   onSnapshot,
   addDoc,
+  getDocs,
+  limit,
   updateDoc,
   doc,
   serverTimestamp,
@@ -257,6 +259,185 @@ export default function CompetitionPage() {
     }
   };
 
+  const addCompetitorsBulk = async (
+    list: Array<Omit<Competitor, "id">>
+  ): Promise<void> => {
+    if (!exerciseId) return;
+    if (!list.length) return;
+    try {
+      const baseRank = Math.max(...competitors.map((c) => c.orderRank ?? 0), 0);
+      const batch = writeBatch(db);
+      list.forEach((competitor, idx) => {
+        const ref = doc(collection(db, "exercises", exerciseId, "competitors"));
+        batch.set(ref, {
+          ...competitor,
+          status: "waiting",
+          orderRank: baseRank + idx + 1,
+          createdAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+      toast.success(`Додано ${list.length} атлетів`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error adding athletes");
+    }
+  };
+
+  const removeAllByStatus = async (status: "waiting" | "done") => {
+    if (!exerciseId) return;
+    try {
+      const q = query(
+        collection(db, "exercises", exerciseId, "competitors"),
+        where("status", "==", status)
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        toast.info(status === "waiting" ? "Список порожній" : "Завершених немає");
+        return;
+      }
+
+      // save snapshot for undo
+      const snapshot = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      await addDoc(collection(db, "exercises", exerciseId, "removalLogs"), {
+        status,
+        competitors: snapshot,
+        createdAt: serverTimestamp(),
+      });
+
+      const batch = writeBatch(db);
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      toast.success(
+        status === "waiting"
+          ? "Усі учасники видалені"
+          : "Усі завершені учасники видалені"
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося очистити список");
+    }
+  };
+
+  const isBot = (c: any) =>
+    !!c?.id && (String(c.id).startsWith("bot-") || c.isBot);
+
+  const placeWaitingBotIfAllowed = async (
+    laneId: number,
+    laneDocId: string,
+    laneType: LaneType | null
+  ) => {
+    if (!exerciseId || !laneDocId || !laneType) return;
+    const allowed = getAllowedCategoriesForLane(exerciseType, laneType);
+    if (!allowed.length) return;
+
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, "exercises", exerciseId, "competitors"),
+          where("status", "==", "waiting"),
+          orderBy("orderRank", "asc"),
+          limit(20)
+        )
+      );
+      if (snap.empty) return;
+
+      const candidates = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+        .filter(
+          (b) =>
+            allowed.includes(String(b.category)) &&
+            (b.isBot === true || String(b.name).toLowerCase() === "пропуск")
+        );
+      const picked = candidates[0];
+      if (!picked) return;
+
+      const batch = writeBatch(db);
+      batch.update(doc(db, "exercises", exerciseId, "competitors", picked.id), {
+        status: "lane",
+      });
+      batch.update(doc(db, "exercises", exerciseId, "lanes", laneDocId), {
+        competitor: {
+          id: picked.id,
+          name: picked.name,
+          category: picked.category,
+          isBot: true,
+        },
+      });
+      await batch.commit();
+      toast.success(`Бот "${picked.name}" додано на доріжку ${laneId}`);
+    } catch (err) {
+      console.error("Failed to place waiting bot", err);
+    }
+  };
+
+  const undoLastRemoval = async (status: "waiting" | "done") => {
+    if (!exerciseId) return;
+    try {
+      const logQuery = query(
+        collection(db, "exercises", exerciseId, "removalLogs"),
+        where("status", "==", status),
+        orderBy("createdAt", "desc"),
+        limit(1)
+      );
+      const logSnap = await getDocs(logQuery);
+      if (logSnap.empty) {
+        toast.info("Немає що відновити");
+        return;
+      }
+      const logDoc = logSnap.docs[0];
+      const data = logDoc.data() as any;
+      const competitorsToRestore: Competitor[] = data.competitors ?? [];
+      if (!competitorsToRestore.length) {
+        toast.info("Лог порожній");
+        return;
+      }
+
+      const batch = writeBatch(db);
+      let baseRank = 0;
+      if (status === "waiting") {
+        baseRank = Math.max(...competitors.map((c) => c.orderRank ?? 0), 0);
+      }
+
+      competitorsToRestore.forEach((c, idx) => {
+        const ref = c.id
+          ? doc(db, "exercises", exerciseId, "competitors", c.id)
+          : doc(collection(db, "exercises", exerciseId, "competitors"));
+
+        const payload: Record<string, unknown> = {
+          ...c,
+          status: c.status ?? status,
+          createdAt: serverTimestamp(),
+        };
+
+        // order/orderRank handling
+        if (status === "waiting") {
+          payload.orderRank = baseRank + idx + 1;
+        } else if (status === "done") {
+          payload.order = c.order ?? Date.now() - idx;
+        }
+
+        // Firestore can't accept undefined
+        Object.keys(payload).forEach((k) => {
+          if (payload[k] === undefined) delete payload[k];
+        });
+
+        batch.set(ref, payload);
+      });
+
+      batch.delete(logDoc.ref); // prevent repeated undo
+      await batch.commit();
+      toast.success(
+        status === "waiting"
+          ? "Повернули видалених учасників"
+          : "Повернули завершених"
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося відновити");
+    }
+  };
+
   const removeCompetitor = async (competitor: Competitor) => {
     if (!exerciseId) return;
     try {
@@ -438,6 +619,10 @@ export default function CompetitionPage() {
     if (!lane || !lane.laneDocId) return toast.error("Lane not found");
 
     try {
+      let applyType = false;
+      let afterCompetitor: any = null;
+      let afterReadyUp: any = null;
+
       await runTransaction(db, async (tx) => {
         const lref = doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!);
         const ls = await tx.get(lref);
@@ -453,7 +638,7 @@ export default function CompetitionPage() {
         const compPatches: CompetitorPatch[] = [];
 
         // NOW -> done
-        if (data.competitor?.id) {
+        if (data.competitor?.id && !isBot(data.competitor)) {
           compPatches.push({
             competitorId: data.competitor.id,
             beforeStatus: "lane",
@@ -471,21 +656,25 @@ export default function CompetitionPage() {
           readyUp: null,
         };
         if (data.readyUp) {
-          after = { competitor: { ...data.readyUp }, readyUp: null };
-          compPatches.push({
-            competitorId: data.readyUp.id,
-            beforeStatus: "ready",
-            afterStatus: "lane",
-          });
-          tx.update(
-            doc(db, "exercises", exerciseId, "competitors", data.readyUp.id),
-            { status: "lane" }
-          );
+          if (isBot(data.readyUp)) {
+            // promote bot to competitor without touching competitors collection
+            after = { competitor: { ...data.readyUp }, readyUp: null };
+          } else {
+            after = { competitor: { ...data.readyUp }, readyUp: null };
+            compPatches.push({
+              competitorId: data.readyUp.id,
+              beforeStatus: "ready",
+              afterStatus: "lane",
+            });
+            tx.update(
+              doc(db, "exercises", exerciseId, "competitors", data.readyUp.id),
+              { status: "lane" }
+            );
+          }
         }
 
         // ✅ Apply pending lane type, if any
-        const applyType =
-          data.nextLaneType && data.nextLaneType !== data.laneType;
+        applyType = !!data.nextLaneType && data.nextLaneType !== data.laneType;
         tx.update(lref, {
           ...after,
           ...(applyType
@@ -525,9 +714,18 @@ export default function CompetitionPage() {
           competitors: compPatches,
           undone: false,
         } as ActionHistory);
+
+        afterCompetitor = after.competitor;
+        afterReadyUp = after.readyUp;
       });
 
       toast.success(t("LaneCleared", { defaultValue: "Lane cleared" }));
+
+      const laneTypeAfter = applyType ? lane.nextLaneType : lane.laneType;
+      const shouldFillBot = !afterCompetitor && !afterReadyUp;
+      if (shouldFillBot) {
+        await placeWaitingBotIfAllowed(lane.id, lane.laneDocId!, laneTypeAfter);
+      }
     } catch (err) {
       console.error("Failed to clear lane", err);
       toast.error(
@@ -552,6 +750,9 @@ export default function CompetitionPage() {
       // 🔒 NEW: Skip locked lanes entirely
       if (lane.locked) continue;
 
+      const isBot = (c: any) =>
+        !!c?.id && (String(c.id).startsWith("bot-") || c.isBot);
+
       const before = {
         competitor: lane.competitor ?? null,
         readyUp: lane.readyUp ?? null,
@@ -563,7 +764,7 @@ export default function CompetitionPage() {
       };
 
       // competitor status changes (only for unlocked lanes)
-      if (lane.competitor) {
+      if (lane.competitor && !isBot(lane.competitor)) {
         compPatches.push({
           competitorId: lane.competitor.id,
           beforeStatus: "lane",
@@ -574,7 +775,7 @@ export default function CompetitionPage() {
           { status: "done", order: Date.now() }
         );
       }
-      if (lane.readyUp) {
+      if (lane.readyUp && !isBot(lane.readyUp)) {
         compPatches.push({
           competitorId: lane.readyUp.id,
           beforeStatus: "ready",
@@ -1161,6 +1362,9 @@ export default function CompetitionPage() {
             competitors={competitors}
             removeCompetitor={removeCompetitor}
             addCompetitor={addCompetitor}
+            addCompetitorsBulk={addCompetitorsBulk}
+            removeAllCompetitors={() => removeAllByStatus("waiting")}
+            undoRemoveAllCompetitors={() => undoLastRemoval("waiting")}
             fillLaneWithCompetitor={fillLaneWithCompetitor}
           />
         </div>
@@ -1181,6 +1385,7 @@ export default function CompetitionPage() {
           <DoneCompetitorsList
             doneCompetitors={doneCompetitors}
             returnDoneCompetitorToLane={returnDoneCompetitorToLane}
+            removeAllDone={() => removeAllByStatus("done")}
           />
         </div>
       </div>
@@ -1231,6 +1436,9 @@ export default function CompetitionPage() {
               competitors={competitors}
               removeCompetitor={removeCompetitor}
               addCompetitor={addCompetitor}
+              addCompetitorsBulk={addCompetitorsBulk}
+              removeAllCompetitors={() => removeAllByStatus("waiting")}
+              undoRemoveAllCompetitors={() => undoLastRemoval("waiting")}
               fillLaneWithCompetitor={fillLaneWithCompetitor}
             />
           </TabsContent>
@@ -1242,6 +1450,8 @@ export default function CompetitionPage() {
               autoFillLanes={autoFillLanes}
               clearLane={clearLane}
               clearAllLanes={clearAllLanes}
+              returnFromNow={returnFromNow}
+              returnFromReadyUp={returnFromReadyUp}
             />
           </TabsContent>
 
@@ -1249,6 +1459,8 @@ export default function CompetitionPage() {
             <DoneCompetitorsList
               doneCompetitors={doneCompetitors}
               returnDoneCompetitorToLane={returnDoneCompetitorToLane}
+              removeAllDone={() => removeAllByStatus("done")}
+              undoRemoveAllDone={() => undoLastRemoval("done")}
             />
           </TabsContent>
         </Tabs>
