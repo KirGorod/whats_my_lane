@@ -4,6 +4,7 @@ import re
 import time
 from typing import List, Tuple, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import Counter, defaultdict
 
 import requests
 from requests.exceptions import RequestsDependencyWarning
@@ -11,28 +12,19 @@ import warnings
 
 warnings.simplefilter("ignore", RequestsDependencyWarning)
 
-bench_100kg = [
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca9822ca7b8219ba2c1e19;p=68ca9822ca7b8219ba2c1e19',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca9805ca7b8219ba2c1e17;p=68ca9805ca7b8219ba2c1e17',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca97e8ca7b8219ba2c1e15;p=68ca97e8ca7b8219ba2c1e15',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca97c4ca7b8219ba2c1e13;p=68ca97c4ca7b8219ba2c1e13',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca97a7ca7b8219ba2c1e11;p=68ca97a7ca7b8219ba2c1e11',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca974aca7b8219ba2c1e0f;p=68ca974aca7b8219ba2c1e0f',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca9725ca7b8219ba2c1e0d;p=68ca9725ca7b8219ba2c1e0d',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca96ffca7b8219ba2c1e0b;p=68ca96ffca7b8219ba2c1e0b',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca96e1ca7b8219ba2c1e09;p=68ca96e1ca7b8219ba2c1e09',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca9697ca7b8219ba2c1e07;p=68ca9697ca7b8219ba2c1e07',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca967bca7b8219ba2c1e05;p=68ca967bca7b8219ba2c1e05',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca9643ca7b8219ba2c1e03;p=68ca9643ca7b8219ba2c1e03',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68ca961eca7b8219ba2c1e01;p=68ca961eca7b8219ba2c1e01',
-]
 
 URLS = [
-    'https://trenvet.allstrongman.com/protocol-page;compId=68cb056cca7b8219ba2c1ea5;p=68cb056cca7b8219ba2c1ea5',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68d278b3b6aff229e4064907;p=68d278b3b6aff229e4064907',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68d4f5ebb6aff229e4064931;p=68d4f5ebb6aff229e4064931',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68d4f1ecb6aff229e4064929;p=68d4f1ecb6aff229e4064929',
-    'https://trenvet.allstrongman.com/protocol-page;compId=68d4f186b6aff229e4064927;p=68d4f186b6aff229e4064927'
+    'https://trenvet.allstrongman.com/comp-page;compId=69241f2242cf6b1953dffb2c',
+    'https://trenvet.allstrongman.com/comp-page;compId=6924234c42cf6b1953dffb3e',
+    'https://trenvet.allstrongman.com/comp-page;compId=69242d3242cf6b1953dffb62',
+    'https://trenvet.allstrongman.com/comp-page;compId=692429fa42cf6b1953dffb56',
+    'https://trenvet.allstrongman.com/comp-page;compId=692425f342cf6b1953dffb4a',
+    'https://trenvet.allstrongman.com/comp-page;compId=6924334142cf6b1953dffb6e',
+    'https://trenvet.allstrongman.com/comp-page;compId=692434a342cf6b1953dffb7a',
+    'https://trenvet.allstrongman.com/comp-page;compId=692436c542cf6b1953dffb86',
+    'https://trenvet.allstrongman.com/comp-page;compId=6924392d42cf6b1953dffb92',
+    'https://trenvet.allstrongman.com/comp-page;compId=69243bbb42cf6b1953dffba7',
+    'https://trenvet.allstrongman.com/comp-page;compId=6920b51642cf6b1953dffa81'
 ]
 
 MAX_WORKERS = 6
@@ -105,6 +97,9 @@ def fetch_competition_meta(session: requests.Session, comp_id: str) -> Tuple[str
         or comp_obj.get("group")
         or ""
     ).strip()
+
+    if category == 'Empty':
+        category = 'h1'
 
     return title_trimmed, category
 
@@ -223,6 +218,48 @@ def write_csv(filename: str, rows: List[Tuple[str, str]]) -> None:
         w.writerows(rows)
 
 
+def print_duplicate_names(rows: List[Tuple[str, str]]) -> None:
+    """
+    Print duplicated names (ignoring category), showing category counts when repeated.
+    """
+    name_to_categories: Dict[str, List[str]] = defaultdict(list)
+    for name, category in rows:
+        name_to_categories[name].append(category)
+
+    duplicates: List[Tuple[str, str]] = []
+    for name, categories in name_to_categories.items():
+        if len(categories) <= 1:
+            continue
+        counts = Counter(categories)
+        parts = [f"{cat} x{cnt}" for cat, cnt in counts.items() if cnt > 1]
+        if not parts:
+            # Name duplicated but categories unique; still show categories seen once.
+            parts = [f"{cat} x1" for cat in counts.keys()]
+        duplicates.append((name, ", ".join(parts)))
+
+    print("\nDuplicated names:")
+    if not duplicates:
+        print("None")
+        return
+
+    for name, info in sorted(duplicates, key=lambda x: x[0].lower()):
+        print(f"{name} - {info}")
+
+
+def dedupe_rows(rows: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    """
+    Remove duplicates while preserving order based on (name, category).
+    """
+    seen = set()
+    unique_rows: List[Tuple[str, str]] = []
+    for row in rows:
+        if row in seen:
+            continue
+        seen.add(row)
+        unique_rows.append(row)
+    return unique_rows
+
+
 def main():
     if not URLS:
         print("Add URLs to the URLS list.")
@@ -242,6 +279,10 @@ def main():
                     titles.append((idx, title_trimmed))
                 all_rows.extend(rows)
 
+    print_duplicate_names(all_rows)
+
+    unique_rows = dedupe_rows(all_rows)
+
     # Keep filename behavior: prefer first non-empty title from URL list
     title_from_first = ""
     title_from_last = ""
@@ -253,8 +294,11 @@ def main():
     chosen_title = title_from_first or title_from_last or "competition"
     out_name = sanitize_filename(chosen_title) + ".csv"
 
-    write_csv(out_name, all_rows)
-    print(f"\nSaved -> {out_name} with {len(all_rows)} rows")
+    write_csv(out_name, unique_rows)
+    print(
+        f"\nSaved -> {out_name} with {len(unique_rows)} rows "
+        f"(removed {len(all_rows) - len(unique_rows)} duplicates)"
+    )
 
 
 if __name__ == "__main__":
