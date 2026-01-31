@@ -37,6 +37,7 @@ type ApiAthlete = {
   id?: string;
   name?: string | null;
   lastName?: string | null;
+  userId?: string | null;
 };
 
 type PreviewAthlete = {
@@ -230,15 +231,37 @@ export default function LoadAthletesDialog({
         }
 
         const athletesURL = `${BASE_URL}/competitions/${compId}/athletes`;
+        const competitionURL = `${BASE_URL}/competitions/${compId}`;
         console.log("Athletes URL: ", athletesURL);
-        const res = await fetch(athletesURL);
-        const athletes: ApiAthlete[] = (await res.json()) ?? [];
+        const [athletesRes, competitionRes] = await Promise.all([
+          fetch(athletesURL),
+          fetch(competitionURL),
+        ]);
+
+        const athletes: ApiAthlete[] = (await athletesRes.json()) ?? [];
+
+        // Order should follow the competition's "athletes" array (backend order)
+        const competition = await competitionRes.json();
+        const orderIds: string[] = Array.isArray(competition?.athletes)
+          ? competition.athletes.map((x: unknown) => String(x))
+          : [];
+        const indexById = new Map<string, number>();
+        orderIds.forEach((id, idx) => indexById.set(id, idx));
+
+        const sortedAthletes = [...athletes].sort((a, b) => {
+          const idxA = a.id ? indexById.get(String(a.id)) : undefined;
+          const idxB = b.id ? indexById.get(String(b.id)) : undefined;
+          if (idxA != null && idxB != null) return idxA - idxB;
+          if (idxA != null) return -1;
+          if (idxB != null) return 1;
+          return 0; // keep API order when no mapping
+        });
 
         const compTitle = comp?.title ?? "Competition";
         const isFemaleComp =
           (compTitle ?? "").toUpperCase().includes("ЖІНКИ");
 
-        athletes.forEach((ath, idx) => {
+        sortedAthletes.forEach((ath, idx) => {
           const fullName = `${ath.lastName ?? ""} ${ath.name ?? ""}`.trim();
           if (!fullName) return;
           const key = `${fullName.toLowerCase()}|${category}`;
