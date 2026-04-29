@@ -14,6 +14,7 @@ import {
   exerciseTypes,
   statusOptions,
   type Exercise,
+  type CompetitionKind,
   type ExerciseStatus,
   type ExerciseType,
 } from "../../../types/exercise";
@@ -24,9 +25,16 @@ import {
   doc,
   serverTimestamp,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../../components/ui/tabs";
 
 // --- helpers ---
 function normalizeToHHmm(value: unknown): string {
@@ -55,11 +63,9 @@ function normalizeToHHmm(value: unknown): string {
     const m = String(value.getMinutes()).padStart(2, "0");
     return `${h}:${m}`;
   }
-  // Firestore Timestamp support (if present but typed as unknown)
-  // @ts-ignore
-  if (value && typeof value.toDate === "function") {
-    // @ts-ignore
-    const d: Date = value.toDate();
+  const maybeTimestamp = value as { toDate?: () => Date };
+  if (typeof maybeTimestamp.toDate === "function") {
+    const d = maybeTimestamp.toDate();
     const h = String(d.getHours()).padStart(2, "0");
     const m = String(d.getMinutes()).padStart(2, "0");
     return `${h}:${m}`;
@@ -71,6 +77,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
   const { t } = useTranslation();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activeKind, setActiveKind] = useState<CompetitionKind>("veteran");
 
   const [formData, setFormData] = useState<Omit<Exercise, "id">>({
     name: "",
@@ -78,17 +85,21 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
     // store time as "HH:mm" or "" (empty means optional)
     timeToStart: "",
     numberOfLanes: 1,
-    type: "strength",
+    type: "bench",
+    competitionKind: "veteran",
   });
 
   useEffect(() => {
     if (editingExercise) {
-      const { id, ...rest } = editingExercise;
+      const rest = { ...editingExercise };
+      delete rest.id;
       setFormData({
         ...rest,
+        competitionKind: rest.competitionKind ?? "veteran",
         // normalize any previous datetime to HH:mm for the input
         timeToStart: normalizeToHHmm(rest.timeToStart),
       });
+      setActiveKind(rest.competitionKind ?? "veteran");
       setIsDialogOpen(true);
     }
   }, [editingExercise]);
@@ -99,15 +110,22 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
       status: "planned",
       timeToStart: "",
       numberOfLanes: 1,
-      type: "strength",
+      type: "bench",
+      competitionKind: activeKind,
     });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const competitionKind = editingExercise
+      ? formData.competitionKind ?? "veteran"
+      : activeKind;
 
     const payload = {
       ...formData,
+      competitionKind,
+      numberOfLanes: competitionKind === "team" ? 3 : formData.numberOfLanes,
+      type: competitionKind === "team" ? "bench" : formData.type,
       // persist null if empty to make the field truly optional in Firestore
       timeToStart: formData.timeToStart ? formData.timeToStart : null,
     };
@@ -123,14 +141,27 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
           createdAt: serverTimestamp(),
         });
 
-        // Create lanes subcollection
-        for (let i = 1; i <= formData.numberOfLanes; i++) {
-          await addDoc(collection(db, "exercises", exerciseRef.id, "lanes"), {
+        const batch = writeBatch(db);
+        const lanesCount =
+          competitionKind === "team" ? 3 : formData.numberOfLanes;
+        for (let i = 1; i <= lanesCount; i++) {
+          const laneRef = doc(
+            collection(db, "exercises", exerciseRef.id, "lanes")
+          );
+          batch.set(laneRef, {
             id: i,
             category: null,
+            laneType: null,
+            nextLaneType: null,
+            competitor: null,
+            readyUp: null,
+            team: null,
+            readyUpTeam: null,
+            locked: false,
             createdAt: serverTimestamp(),
           });
         }
+        await batch.commit();
 
         toast.success(t("ExerciseAdded") ?? "Exercise added");
       }
@@ -148,8 +179,16 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
       <DialogTrigger asChild>
         <Button
           onClick={() => {
-            resetForm();
             setEditingExercise(null);
+            setActiveKind("veteran");
+            setFormData({
+              name: "",
+              status: "planned",
+              timeToStart: "",
+              numberOfLanes: 1,
+              type: "bench",
+              competitionKind: "veteran",
+            });
             setIsDialogOpen(true);
           }}
         >
@@ -164,6 +203,29 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!editingExercise && (
+            <Tabs
+              value={activeKind}
+              onValueChange={(value) => {
+                const kind = value as CompetitionKind;
+                setActiveKind(kind);
+                setFormData((prev) => ({
+                  ...prev,
+                  competitionKind: kind,
+                  numberOfLanes: kind === "team" ? 3 : prev.numberOfLanes,
+                  type: kind === "team" ? "bench" : prev.type,
+                }));
+              }}
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="veteran">Veteran</TabsTrigger>
+                <TabsTrigger value="team">Команди</TabsTrigger>
+              </TabsList>
+              <TabsContent value="veteran" />
+              <TabsContent value="team" />
+            </Tabs>
+          )}
+
           {/* Name */}
           <div>
             <Label htmlFor="name">{t("ExerciseName")}</Label>
@@ -223,46 +285,50 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
           </div>
 
           {/* Lanes */}
-          <div>
-            <Label htmlFor="numberOfLanes">{t("NumberOfLanes")}</Label>
-            <Input
-              id="numberOfLanes"
-              type="number"
-              min={1}
-              value={formData.numberOfLanes}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  numberOfLanes: Number(e.target.value),
-                }))
-              }
-              required
-              disabled={!!editingExercise}
-            />
-          </div>
+          {activeKind === "veteran" && (
+            <div>
+              <Label htmlFor="numberOfLanes">{t("NumberOfLanes")}</Label>
+              <Input
+                id="numberOfLanes"
+                type="number"
+                min={1}
+                value={formData.numberOfLanes}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    numberOfLanes: Number(e.target.value),
+                  }))
+                }
+                required
+                disabled={!!editingExercise}
+              />
+            </div>
+          )}
 
           {/* Type */}
-          <div>
-            <Label htmlFor="type">{t("ExerciseType")}</Label>
-            <select
-              id="type"
-              value={formData.type}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  type: e.target.value as ExerciseType,
-                }))
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              required
-            >
-              {exerciseTypes.map((tOption) => (
-                <option key={tOption.value} value={tOption.value}>
-                  {t(tOption.value)}
-                </option>
-              ))}
-            </select>
-          </div>
+          {activeKind === "veteran" && (
+            <div>
+              <Label htmlFor="type">{t("ExerciseType")}</Label>
+              <select
+                id="type"
+                value={formData.type}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    type: e.target.value as ExerciseType,
+                  }))
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                required
+              >
+                {exerciseTypes.map((tOption) => (
+                  <option key={tOption.value} value={tOption.value}>
+                    {t(tOption.value)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4">

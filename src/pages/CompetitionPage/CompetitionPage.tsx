@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Competitor } from "../../types/competitor";
-import type { ExerciseType, ExerciseStatus } from "../../types/exercise";
+import type {
+  CompetitionKind,
+  ExerciseType,
+  ExerciseStatus,
+} from "../../types/exercise";
 import type { LaneModel, LaneType } from "../../types/lane";
 import { LANE_TYPES } from "../../types/lane";
 import CompetitorsList from "./components/CompetitorsList";
@@ -19,7 +23,6 @@ import {
   addDoc,
   getDocs,
   limit,
-  updateDoc,
   doc,
   serverTimestamp,
   writeBatch,
@@ -36,7 +39,6 @@ import {
   getAllowedCategoriesForLane,
   isCategoryAllowedForLane,
 } from "../../utils/laneRules";
-import { groupLanesByType, makeWaitingByCategory } from "../../utils/laneUtils";
 import type {
   ActionHistory,
   CompetitorPatch,
@@ -44,6 +46,7 @@ import type {
 } from "../../types/history";
 import { useTranslation } from "react-i18next";
 import ScrollToTopButton from "../../components/main/ScrollToTopButton";
+import TeamCompetitionPage from "./TeamCompetitionPage";
 
 const normalizeExerciseType = (raw: any): ExerciseType => {
   const v = String(raw ?? "").toLowerCase();
@@ -58,15 +61,6 @@ const normalizeExerciseType = (raw: any): ExerciseType => {
 /** Lane type that controls READY UP (next round takes precedence) */
 const readyUpLaneType = (lane: LaneModel): LaneType | null =>
   lane.nextLaneType ?? lane.laneType ?? null;
-
-/** Allowed categories for READY UP (uses nextLaneType if set) */
-const getAllowedForReadyUp = (
-  exerciseType: ExerciseType,
-  lane: LaneModel
-): string[] => {
-  const lt = readyUpLaneType(lane);
-  return lt ? getAllowedCategoriesForLane(exerciseType, lt) : [];
-};
 
 /** Check if category can go to READY UP (uses nextLaneType if set) */
 const isCategoryAllowedForReady = (
@@ -92,7 +86,7 @@ function groupLanesByReadyType(
     arr.push(l);
     m.set(key, arr);
   }
-  for (const [k, arr] of m) arr.sort((a, b) => a.id - b.id);
+  for (const [, arr] of m) arr.sort((a, b) => a.id - b.id);
   return m;
 }
 
@@ -112,6 +106,9 @@ export default function CompetitionPage() {
   );
   const [exerciseStatus, setExerciseStatus] =
     useState<ExerciseStatus>("planned");
+  const [competitionKind, setCompetitionKind] =
+    useState<CompetitionKind>("veteran");
+  const [metaLoaded, setMetaLoaded] = useState(false);
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
@@ -122,9 +119,13 @@ export default function CompetitionPage() {
     if (!exerciseId) return;
     const unsub = onSnapshot(doc(db, "exercises", exerciseId), (snap) => {
       const data = snap.data() as any;
-      if (!data) return;
+      if (!data) {
+        setMetaLoaded(true);
+        return;
+      }
       setExerciseType(normalizeExerciseType(data?.type));
       setExerciseName(data?.name);
+      setCompetitionKind(data?.competitionKind === "team" ? "team" : "veteran");
       if (
         data?.status === "planned" ||
         data?.status === "ongoing" ||
@@ -132,13 +133,14 @@ export default function CompetitionPage() {
       ) {
         setExerciseStatus(data.status);
       }
+      setMetaLoaded(true);
     });
     return () => unsub();
   }, [exerciseId]);
 
   // Live collections
   useEffect(() => {
-    if (!exerciseId) return;
+    if (!exerciseId || !metaLoaded || competitionKind === "team") return;
 
     const waitingQuery = query(
       collection(db, "exercises", exerciseId, "competitors"),
@@ -200,12 +202,7 @@ export default function CompetitionPage() {
       unsubDone();
       unsubLanes();
     };
-  }, [exerciseId]);
-
-  const waitingCompetitors = useMemo(
-    () => competitors.filter((c) => c.status === "waiting"),
-    [competitors]
-  );
+  }, [exerciseId, metaLoaded, competitionKind]);
 
   function groupLanesByType(
     lanes: LaneModel[],
@@ -219,7 +216,7 @@ export default function CompetitionPage() {
       arr.push(l);
       m.set(l.laneType, arr);
     }
-    for (const [k, arr] of m) arr.sort((a, b) => a.id - b.id);
+    for (const [, arr] of m) arr.sort((a, b) => a.id - b.id);
     return m;
   }
 
@@ -1352,6 +1349,21 @@ export default function CompetitionPage() {
 
   if (!exerciseId) {
     return <p className="p-6 text-gray-500">Invalid competition</p>;
+  }
+
+  if (!metaLoaded) {
+    return <p className="p-6 text-gray-500">Loading competition...</p>;
+  }
+
+  if (competitionKind === "team") {
+    return (
+      <TeamCompetitionPage
+        exerciseId={exerciseId}
+        name={exerciseName}
+        status={exerciseStatus}
+        type={exerciseType}
+      />
+    );
   }
 
   const activeLanesCount = lanes.filter((l) => !!l.competitor).length;

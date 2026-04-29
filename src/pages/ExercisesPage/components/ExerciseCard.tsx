@@ -1,4 +1,4 @@
-import { Dumbbell, Edit, Trash2 } from "lucide-react";
+import { Dumbbell, Edit, Trash2, UsersRound } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -18,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog";
 import { statusOptions } from "../../../types/exercise";
+import type { Exercise } from "../../../types/exercise";
 import { Link } from "react-router-dom";
 import { statusBadgeClass } from "../../../utils/statusStyles";
 
@@ -27,12 +28,16 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useAuth } from "../../../context/AuthContext";
 import { useTranslation } from "react-i18next";
 
-function useCompetitorCounts(exerciseId: string) {
+function useCompetitorCounts(exerciseId: string, enabled: boolean) {
   const [total, setTotal] = useState(0);
   const [waiting, setWaiting] = useState(0);
 
   useEffect(() => {
-    if (!exerciseId) return;
+    if (!exerciseId || !enabled) {
+      setTotal(0);
+      setWaiting(0);
+      return;
+    }
     const baseCol = collection(db, "exercises", exerciseId, "competitors");
     const unsubTotal = onSnapshot(baseCol, (snap) => setTotal(snap.size));
     const unsubWaiting = onSnapshot(
@@ -43,13 +48,40 @@ function useCompetitorCounts(exerciseId: string) {
       unsubTotal();
       unsubWaiting();
     };
-  }, [exerciseId]);
+  }, [exerciseId, enabled]);
+
+  return { total, waiting };
+}
+
+function useTeamCounts(exerciseId: string, enabled: boolean) {
+  const [total, setTotal] = useState(0);
+  const [waiting, setWaiting] = useState(0);
+
+  useEffect(() => {
+    if (!exerciseId || !enabled) {
+      setTotal(0);
+      setWaiting(0);
+      return;
+    }
+    const baseCol = collection(db, "exercises", exerciseId, "teams");
+    const unsubTotal = onSnapshot(baseCol, (snap) => setTotal(snap.size));
+    const unsubWaiting = onSnapshot(
+      query(baseCol, where("status", "==", "waiting")),
+      (snap) => setWaiting(snap.size)
+    );
+    return () => {
+      unsubTotal();
+      unsubWaiting();
+    };
+  }, [exerciseId, enabled]);
 
   return { total, waiting };
 }
 
 // Robust formatter for "HH:mm" | null | ISO | Date | Firestore Timestamp
-function formatTimeAny(value: any, t: (k: string) => string): string {
+type TimestampLike = { toDate: () => Date };
+
+function formatTimeAny(value: unknown, t: (k: string) => string): string {
   if (!value) return t("NotSet") || "—";
 
   // String cases
@@ -75,8 +107,9 @@ function formatTimeAny(value: any, t: (k: string) => string): string {
   }
 
   // Firestore Timestamp
-  if (value && typeof value.toDate === "function") {
-    const d = value.toDate();
+  const maybeTimestamp = value as Partial<TimestampLike>;
+  if (typeof maybeTimestamp.toDate === "function") {
+    const d = maybeTimestamp.toDate();
     return d.toLocaleTimeString("uk-UA", {
       hour: "2-digit",
       minute: "2-digit",
@@ -98,19 +131,31 @@ function formatTimeAny(value: any, t: (k: string) => string): string {
 }
 
 type Props = {
-  exercise: any; // keep as any to avoid refactors here
-  handleEdit: (e: any) => void;
-  handleDelete: (e: any) => void;
+  exercise: Exercise;
+  handleEdit: (e: Exercise) => void;
+  handleDelete: (e: Exercise) => void;
 };
 
 const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
-  const { total, waiting } = useCompetitorCounts(exercise.id);
+  const competitionKind = exercise.competitionKind ?? "veteran";
+  const { total, waiting } = useCompetitorCounts(
+    exercise.id,
+    competitionKind === "veteran"
+  );
+  const { total: totalTeams, waiting: waitingTeams } = useTeamCounts(
+    exercise.id,
+    competitionKind === "team"
+  );
   const { isAdmin } = useAuth();
   const { t } = useTranslation();
 
   const Title = (
     <CardTitle className="text-base sm:text-lg flex items-center gap-2 truncate group-hover:underline">
-      <Dumbbell className="w-5 h-5 shrink-0" />
+      {competitionKind === "team" ? (
+        <UsersRound className="w-5 h-5 shrink-0" />
+      ) : (
+        <Dumbbell className="w-5 h-5 shrink-0" />
+      )}
       <span className="truncate">{exercise.name}</span>
     </CardTitle>
   );
@@ -190,6 +235,9 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
           <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
             {exercise.numberOfLanes} {t("LanesCount")}
           </span>
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+            {competitionKind === "team" ? "Команди" : "Veteran"}
+          </span>
         </div>
       </CardHeader>
 
@@ -205,15 +253,30 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="font-medium text-gray-700">
-              {t("competitors")}
-            </span>
-            <span className="text-gray-600">
-              {total} {total === 1 ? t("competitor") : t("competitorsCount")}
-              {typeof waiting === "number"
-                ? ` (${waiting} ${t("Waiting")})`
-                : ""}
-            </span>
+            {competitionKind === "team" ? (
+              <>
+                <span className="font-medium text-gray-700">Команди</span>
+                <span className="text-gray-600">
+                  {totalTeams} команд
+                  {typeof waitingTeams === "number"
+                    ? ` (${waitingTeams} ${t("Waiting")})`
+                    : ""}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="font-medium text-gray-700">
+                  {t("competitors")}
+                </span>
+                <span className="text-gray-600">
+                  {total}{" "}
+                  {total === 1 ? t("competitor") : t("competitorsCount")}
+                  {typeof waiting === "number"
+                    ? ` (${waiting} ${t("Waiting")})`
+                    : ""}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </CardContent>

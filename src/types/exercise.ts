@@ -1,5 +1,6 @@
 export type ExerciseStatus = "planned" | "ongoing" | "finished";
 export type ExerciseType = "bench" | "kettle" | "airbike" | "rowing";
+export type CompetitionKind = "veteran" | "team";
 
 export interface Exercise {
   id: string;
@@ -8,6 +9,7 @@ export interface Exercise {
   timeToStart: string; // ISO string
   numberOfLanes: number;
   type: ExerciseType;
+  competitionKind?: CompetitionKind;
 }
 
 export const statusOptions = [

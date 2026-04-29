@@ -28,7 +28,6 @@ export default memo(function CompetitionHeader({
   exerciseId,
   name,
   status,
-  type,
 }: {
   exerciseId: string;
   name?: string;
