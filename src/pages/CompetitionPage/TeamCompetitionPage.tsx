@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -29,9 +30,11 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
+  Download,
   Flag,
   Pencil,
   Lock,
+  Loader2,
   Plus,
   RotateCcw,
   GripVertical,
@@ -94,6 +97,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import type { ExerciseStatus, ExerciseType } from "../../types/exercise";
 import type {
@@ -117,6 +127,33 @@ type DraftAthlete = {
   name: string;
 };
 
+type ApiCompetition = {
+  id: string;
+  title?: string;
+  date?: string;
+  isTeam?: boolean | null;
+};
+
+type ApiTeam = {
+  id?: string;
+  name?: string | null;
+  lastName?: string | null;
+  userId?: string | null;
+};
+
+type ProtocolEntry = {
+  rank?: number;
+  userId?: string | null;
+};
+
+type PreviewTeam = {
+  id: string;
+  name: string;
+  rank: number;
+};
+
+const API_BASE_URL = "https://apitrenvet.allstrongman.com/api";
+
 const createDraftAthlete = (name = ""): DraftAthlete => ({
   id:
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -124,6 +161,31 @@ const createDraftAthlete = (name = ""): DraftAthlete => ({
       : `${Date.now()}-${Math.random()}`,
   name,
 });
+
+const formatApiDate = (iso?: string) => {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("uk-UA", {
+    day: "2-digit",
+    month: "short",
+  }).format(date);
+};
+
+const apiTeamName = (team?: ApiTeam | null) =>
+  `${team?.lastName ?? ""} ${team?.name ?? ""}`.trim();
+
+const protocolList = (payload: unknown): ProtocolEntry[] => {
+  if (Array.isArray(payload)) return payload as ProtocolEntry[];
+  if (
+    payload &&
+    typeof payload === "object" &&
+    Array.isArray((payload as { protocol?: unknown }).protocol)
+  ) {
+    return (payload as { protocol: ProtocolEntry[] }).protocol;
+  }
+  return [];
+};
 
 const teamPayload = (team: Team): LaneTeam => ({
   id: team.id,
@@ -405,6 +467,275 @@ function AddTeamDialog({
   );
 }
 
+function LoadProtocolTeamsDialog({
+  addTeamsBulk,
+}: {
+  addTeamsBulk: (teams: Array<Omit<Team, "id">>) => Promise<void> | void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [leagues, setLeagues] = useState<ApiCompetition[]>([]);
+  const [competitions, setCompetitions] = useState<ApiCompetition[]>([]);
+  const [selectedLeague, setSelectedLeague] = useState("");
+  const [selectedCompetition, setSelectedCompetition] = useState("");
+  const [preview, setPreview] = useState<PreviewTeam[]>([]);
+  const [loadingLeagues, setLoadingLeagues] = useState(false);
+  const [loadingCompetitions, setLoadingCompetitions] = useState(false);
+  const [loadingProtocol, setLoadingProtocol] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const loadLeagues = useCallback(async () => {
+    setLoadingLeagues(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/competitions?filter=&size=9&page=0`);
+      const data = await res.json();
+      const next: ApiCompetition[] = data?.competitions ?? [];
+      setLeagues(next);
+      if (!selectedLeague && next.length) setSelectedLeague(next[0].id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося завантажити ліги");
+    } finally {
+      setLoadingLeagues(false);
+    }
+  }, [selectedLeague]);
+
+  const loadCompetitions = useCallback(async (leagueId: string) => {
+    setLoadingCompetitions(true);
+    setCompetitions([]);
+    setSelectedCompetition("");
+    setPreview([]);
+    try {
+      const all: ApiCompetition[] = [];
+      for (let page = 0; page < 30; page += 1) {
+        const url = `${API_BASE_URL}/competitions?filter=&size=9&page=${page}&parentCompetitionId=${leagueId}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const next: ApiCompetition[] = data?.competitions ?? [];
+        all.push(...next);
+        if (!next.length || next.length < 9) break;
+      }
+      const teamCompetitions = all.filter((competition) => competition.isTeam);
+      const visible = teamCompetitions.length ? teamCompetitions : all;
+      setCompetitions(visible);
+      if (visible.length) setSelectedCompetition(visible[0].id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося завантажити змагання");
+    } finally {
+      setLoadingCompetitions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open || leagues.length) return;
+    void loadLeagues();
+  }, [open, leagues.length, loadLeagues]);
+
+  useEffect(() => {
+    if (!selectedLeague) return;
+    void loadCompetitions(selectedLeague);
+  }, [selectedLeague, loadCompetitions]);
+
+  const loadProtocolTeams = async () => {
+    if (!selectedCompetition) return toast.error("Оберіть змагання");
+    setLoadingProtocol(true);
+    try {
+      const [protocolRes, athletesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/competitions/${selectedCompetition}/protocol`),
+        fetch(`${API_BASE_URL}/competitions/${selectedCompetition}/athletes`),
+      ]);
+      const protocol = protocolList(await protocolRes.json()).sort(
+        (a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER)
+      );
+      const athletes: ApiTeam[] = (await athletesRes.json()) ?? [];
+      const teamById = new Map<string, ApiTeam>();
+      athletes.forEach((team) => {
+        if (team.id) teamById.set(String(team.id), team);
+      });
+
+      const seen = new Set<string>();
+      const next = protocol.flatMap((entry, index) => {
+        const id = entry.userId ? String(entry.userId) : "";
+        const name = apiTeamName(teamById.get(id));
+        const key = name.toLowerCase();
+        if (!id || !name || seen.has(key)) return [];
+        seen.add(key);
+        return [{
+          id,
+          name,
+          rank: entry.rank ?? index + 1,
+        }];
+      });
+
+      setPreview(next);
+      if (next.length) toast.success(`Завантажено ${next.length} команд`);
+      else toast.error("Команд у протоколі не знайдено");
+    } catch (err) {
+      console.error(err);
+      toast.error("Помилка при завантаженні протоколу");
+    } finally {
+      setLoadingProtocol(false);
+    }
+  };
+
+  const saveTeams = async () => {
+    if (!preview.length) return toast.error("Немає команд для додавання");
+    const confirmed = window.confirm(`Додати ${preview.length} команд до черги?`);
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      await addTeamsBulk(preview.map((team) => ({
+        name: team.name,
+        athletes: [],
+      })));
+      setOpen(false);
+      setPreview([]);
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося додати команди");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOpenChange = (value: boolean) => {
+    setOpen(value);
+    if (!value) setPreview([]);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" title="Завантажити команди з протоколу">
+          <Download className="w-5 h-5 text-amber-600" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Завантажити команди з протоколу</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid gap-3">
+            <div className="grid gap-1">
+              <Label>Ліга</Label>
+              <Select value={selectedLeague} onValueChange={setSelectedLeague}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Оберіть лігу" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingLeagues ? (
+                    <SelectItem value="loading" disabled>
+                      Завантаження...
+                    </SelectItem>
+                  ) : (
+                    leagues.map((league) => (
+                      <SelectItem key={league.id} value={league.id}>
+                        <span>{league.title ?? "Ліга"}</span>
+                        {league.date && <span>{formatApiDate(league.date)}</span>}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1">
+              <Label>Змагання</Label>
+              <Select
+                value={selectedCompetition}
+                onValueChange={(value) => {
+                  setSelectedCompetition(value);
+                  setPreview([]);
+                }}
+                disabled={loadingCompetitions || !competitions.length}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Оберіть змагання" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingCompetitions ? (
+                    <SelectItem value="loading" disabled>
+                      Завантаження...
+                    </SelectItem>
+                  ) : (
+                    competitions.map((competition) => (
+                      <SelectItem key={competition.id} value={competition.id}>
+                        {competition.title ?? "Змагання"}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={loadProtocolTeams}
+              disabled={loadingProtocol || loadingCompetitions || !selectedCompetition}
+            >
+              {loadingProtocol ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Завантаження
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" />
+                  Завантажити протокол
+                </>
+              )}
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Попередній список ({preview.length})</p>
+            {preview.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Після завантаження тут з'являться команди з протоколу.
+              </p>
+            ) : (
+              <div className="h-56 rounded border overflow-y-auto divide-y">
+                {preview.map((team) => (
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between gap-3 px-3 py-2"
+                  >
+                    <span className="text-sm font-medium">{team.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      #{team.rank}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Скасувати
+          </Button>
+          <Button onClick={saveTeams} disabled={saving || !preview.length}>
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Додаємо...
+              </>
+            ) : (
+              "Додати до черги"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EditTeamDialog({
   team,
   updateTeam,
@@ -549,6 +880,7 @@ function TeamCard({
 function TeamList({
   teams,
   addTeam,
+  addTeamsBulk,
   fillLaneWithTeam,
   removeTeam,
   updateTeam,
@@ -558,6 +890,7 @@ function TeamList({
 }: {
   teams: Team[];
   addTeam: (team: Omit<Team, "id">) => Promise<void> | void;
+  addTeamsBulk: (teams: Array<Omit<Team, "id">>) => Promise<void> | void;
   fillLaneWithTeam: (team: Team) => Promise<void> | void;
   removeTeam: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
@@ -619,7 +952,12 @@ function TeamList({
                 )}
               </Button>
             )}
-            {isAdmin && !collapsed && <AddTeamDialog addTeam={addTeam} />}
+            {isAdmin && !collapsed && (
+              <>
+                <LoadProtocolTeamsDialog addTeamsBulk={addTeamsBulk} />
+                <AddTeamDialog addTeam={addTeam} />
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1257,6 +1595,22 @@ export default function TeamCompetitionPage({
     toast.success("Команду додано");
   };
 
+  const addTeamsBulk = async (newTeams: Array<Omit<Team, "id">>) => {
+    if (!newTeams.length) return;
+    const maxRank = Math.max(...teams.map((t) => t.orderRank ?? 0), 0);
+    const batch = writeBatch(db);
+    newTeams.forEach((team, index) => {
+      batch.set(doc(collection(db, "exercises", exerciseId, "teams")), {
+        ...team,
+        status: "waiting",
+        orderRank: maxRank + index + 1,
+        createdAt: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+    toast.success(`Додано ${newTeams.length} команд`);
+  };
+
   const updateTeam = async (team: Team, patch: Omit<Team, "id">) => {
     const updatedTeam: LaneTeam = {
       id: team.id,
@@ -1577,6 +1931,7 @@ export default function TeamCompetitionPage({
           <TeamList
             teams={teams}
             addTeam={addTeam}
+            addTeamsBulk={addTeamsBulk}
             fillLaneWithTeam={fillLaneWithTeam}
             removeTeam={removeTeam}
             updateTeam={updateTeam}
@@ -1641,6 +1996,7 @@ export default function TeamCompetitionPage({
             <TeamList
               teams={teams}
               addTeam={addTeam}
+              addTeamsBulk={addTeamsBulk}
               fillLaneWithTeam={fillLaneWithTeam}
               removeTeam={removeTeam}
               updateTeam={updateTeam}

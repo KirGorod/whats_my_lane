@@ -126,7 +126,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
     const payload = {
       ...formData,
       competitionKind,
-      numberOfLanes: competitionKind === "team" ? 3 : formData.numberOfLanes,
+      numberOfLanes: competitionKind === "team" ? 2 : formData.numberOfLanes,
       type: competitionKind === "team" ? "bench" : formData.type,
       teamNamesOnly:
         competitionKind === "team" ? !!formData.teamNamesOnly : false,
@@ -147,7 +147,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
 
         const batch = writeBatch(db);
         const lanesCount =
-          competitionKind === "team" ? 3 : formData.numberOfLanes;
+          competitionKind === "team" ? 2 : formData.numberOfLanes;
         for (let i = 1; i <= lanesCount; i++) {
           const laneRef = doc(
             collection(db, "exercises", exerciseRef.id, "lanes")
@@ -217,7 +217,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
                 setFormData((prev) => ({
                   ...prev,
                   competitionKind: kind,
-                  numberOfLanes: kind === "team" ? 3 : prev.numberOfLanes,
+                  numberOfLanes: kind === "team" ? 2 : prev.numberOfLanes,
                   type: kind === "team" ? "bench" : prev.type,
                   teamNamesOnly: kind === "team" ? prev.teamNamesOnly : false,
                 }));
