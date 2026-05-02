@@ -10,6 +10,7 @@ export interface Exercise {
   numberOfLanes: number;
   type: ExerciseType;
   competitionKind?: CompetitionKind;
+  teamNamesOnly?: boolean;
 }
 
 export const statusOptions = [

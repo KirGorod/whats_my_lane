@@ -87,6 +87,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
     numberOfLanes: 1,
     type: "bench",
     competitionKind: "veteran",
+    teamNamesOnly: false,
   });
 
   useEffect(() => {
@@ -112,6 +113,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
       numberOfLanes: 1,
       type: "bench",
       competitionKind: activeKind,
+      teamNamesOnly: false,
     });
   };
 
@@ -126,6 +128,8 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
       competitionKind,
       numberOfLanes: competitionKind === "team" ? 3 : formData.numberOfLanes,
       type: competitionKind === "team" ? "bench" : formData.type,
+      teamNamesOnly:
+        competitionKind === "team" ? !!formData.teamNamesOnly : false,
       // persist null if empty to make the field truly optional in Firestore
       timeToStart: formData.timeToStart ? formData.timeToStart : null,
     };
@@ -188,6 +192,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
               numberOfLanes: 1,
               type: "bench",
               competitionKind: "veteran",
+              teamNamesOnly: false,
             });
             setIsDialogOpen(true);
           }}
@@ -214,6 +219,7 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
                   competitionKind: kind,
                   numberOfLanes: kind === "team" ? 3 : prev.numberOfLanes,
                   type: kind === "team" ? "bench" : prev.type,
+                  teamNamesOnly: kind === "team" ? prev.teamNamesOnly : false,
                 }));
               }}
             >
@@ -328,6 +334,23 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
                 ))}
               </select>
             </div>
+          )}
+
+          {activeKind === "team" && (
+            <label className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!!formData.teamNamesOnly}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    teamNamesOnly: e.target.checked,
+                  }))
+                }
+                className="h-4 w-4"
+              />
+              Показувати лише назви команд
+            </label>
           )}
 
           {/* Actions */}

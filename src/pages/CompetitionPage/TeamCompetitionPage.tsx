@@ -270,7 +270,6 @@ function TeamFormDialog({
       .map((athlete) => athlete.name.trim())
       .filter(Boolean);
     if (!name.trim()) return toast.error("Вкажіть назву команди");
-    if (!cleanAthletes.length) return toast.error("Додайте хоча б одного атлета");
 
     await onSubmit({ name: name.trim(), athletes: cleanAthletes });
     reset();
@@ -466,6 +465,7 @@ function TeamCard({
   onRemove,
   onReturn,
   onEdit,
+  showAthletes = true,
   doneIndex,
   doneTotal,
 }: {
@@ -475,6 +475,7 @@ function TeamCard({
   onRemove?: (team: Team) => Promise<void> | void;
   onReturn?: (team: Team) => Promise<void> | void;
   onEdit?: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  showAthletes?: boolean;
   doneIndex?: number;
   doneTotal?: number;
 }) {
@@ -503,7 +504,7 @@ function TeamCard({
               {team.name}
             </div>
           </div>
-          <TeamAthletesList athletes={team.athletes ?? []} />
+          {showAthletes && <TeamAthletesList athletes={team.athletes ?? []} />}
         </div>
       </div>
 
@@ -551,6 +552,7 @@ function TeamList({
   fillLaneWithTeam,
   removeTeam,
   updateTeam,
+  showAthletes = true,
   collapsed = false,
   onToggleCollapse,
 }: {
@@ -559,6 +561,7 @@ function TeamList({
   fillLaneWithTeam: (team: Team) => Promise<void> | void;
   removeTeam: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  showAthletes?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
@@ -645,6 +648,7 @@ function TeamList({
                   onFill={fillLaneWithTeam}
                   onRemove={removeTeam}
                   onEdit={updateTeam}
+                  showAthletes={showAthletes}
                 />
               ))
             )}
@@ -661,12 +665,14 @@ function TeamBlock({
   tone,
   onReturn,
   onEdit,
+  showAthletes = true,
 }: {
   title: string;
   team: LaneTeam | null;
   tone: "green" | "yellow";
   onReturn: () => Promise<void> | void;
   onEdit?: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  showAthletes?: boolean;
 }) {
   const { isAdmin } = useAuth();
   const color =
@@ -704,7 +710,7 @@ function TeamBlock({
           <div className="text-2xl xl:text-4xl font-semibold break-words">
             {team.name}
           </div>
-          <TeamAthletesList athletes={team.athletes} centered />
+          {showAthletes && <TeamAthletesList athletes={team.athletes} centered />}
         </div>
       ) : (
         <div className="text-center text-sm italic opacity-75">Порожньо</div>
@@ -723,6 +729,7 @@ function TeamLaneCard({
   onRemoveLane,
   onEditTeam,
   onAddSkip,
+  showAthletes = true,
 }: {
   lane: TeamLaneModel;
   isPending: boolean;
@@ -733,6 +740,7 @@ function TeamLaneCard({
   onRemoveLane: () => Promise<void> | void;
   onEditTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
   onAddSkip: () => Promise<void> | void;
+  showAthletes?: boolean;
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
@@ -780,6 +788,7 @@ function TeamLaneCard({
           tone="green"
           onReturn={onReturnFromNow}
           onEdit={onEditTeam}
+          showAthletes={showAthletes}
         />
         <TeamBlock
           title={t("ReadyUp")}
@@ -787,6 +796,7 @@ function TeamLaneCard({
           tone="yellow"
           onReturn={onReturnFromReadyUp}
           onEdit={onEditTeam}
+          showAthletes={showAthletes}
         />
       </CardContent>
 
@@ -837,6 +847,8 @@ function TeamLanes({
   returnFromNow,
   returnFromReadyUp,
   updateTeam,
+  teamNamesOnly,
+  onToggleTeamNamesOnly,
 }: {
   exerciseId: string;
   lanes: TeamLaneModel[];
@@ -846,6 +858,8 @@ function TeamLanes({
   returnFromNow: (laneId: number) => Promise<void> | void;
   returnFromReadyUp: (laneId: number) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  teamNamesOnly: boolean;
+  onToggleTeamNamesOnly: () => void;
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
@@ -990,6 +1004,14 @@ function TeamLanes({
               {t("AutoFill")}
             </Button>
             <Button
+              onClick={onToggleTeamNamesOnly}
+              size="sm"
+              variant={teamNamesOnly ? "default" : "outline"}
+              className="flex-1"
+            >
+              Лише назви
+            </Button>
+            <Button
               onClick={clearAllLanes}
               size="sm"
               variant="outline"
@@ -1063,6 +1085,7 @@ function TeamLanes({
             onRemoveLane={withLanePending(lane.id, () => removeLane(lane))}
             onEditTeam={updateTeam}
             onAddSkip={withLanePending(lane.id, () => addSkipToLane(lane))}
+            showAthletes={!teamNamesOnly}
           />
         ))}
       </div>
@@ -1074,12 +1097,14 @@ function DoneTeamsList({
   teams,
   returnDoneTeamToLane,
   updateTeam,
+  showAthletes = true,
   collapsed = false,
   onToggleCollapse,
 }: {
   teams: Team[];
   returnDoneTeamToLane: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  showAthletes?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
@@ -1141,6 +1166,7 @@ function DoneTeamsList({
                 doneTotal={teams.length}
                 onReturn={returnDoneTeamToLane}
                 onEdit={updateTeam}
+                showAthletes={showAthletes}
               />
             ))
           )}
@@ -1155,11 +1181,13 @@ export default function TeamCompetitionPage({
   name,
   status,
   type,
+  teamNamesOnly,
 }: {
   exerciseId: string;
   name?: string;
   status: ExerciseStatus;
   type: ExerciseType;
+  teamNamesOnly: boolean;
 }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<"teams" | "lanes" | "done">(
@@ -1527,6 +1555,12 @@ export default function TeamCompetitionPage({
     await fillLaneWithTeam(team);
   };
 
+  const toggleTeamNamesOnly = async () => {
+    await updateDoc(doc(db, "exercises", exerciseId), {
+      teamNamesOnly: !teamNamesOnly,
+    });
+  };
+
   const activeLanesCount = lanes.filter((lane) => !!lane.team).length;
 
   return (
@@ -1546,6 +1580,7 @@ export default function TeamCompetitionPage({
             fillLaneWithTeam={fillLaneWithTeam}
             removeTeam={removeTeam}
             updateTeam={updateTeam}
+            showAthletes={!teamNamesOnly}
             collapsed={teamsCollapsed}
             onToggleCollapse={() => setTeamsCollapsed((prev) => !prev)}
           />
@@ -1560,6 +1595,8 @@ export default function TeamCompetitionPage({
             returnFromNow={(laneId) => returnTeamToWaiting(laneId, "team")}
             returnFromReadyUp={(laneId) => returnTeamToWaiting(laneId, "readyUpTeam")}
             updateTeam={updateTeam}
+            teamNamesOnly={teamNamesOnly}
+            onToggleTeamNamesOnly={toggleTeamNamesOnly}
           />
         </div>
         <div
@@ -1572,6 +1609,7 @@ export default function TeamCompetitionPage({
             teams={doneTeams}
             returnDoneTeamToLane={returnDoneTeamToLane}
             updateTeam={updateTeam}
+            showAthletes={!teamNamesOnly}
             collapsed={doneCollapsed}
             onToggleCollapse={() => setDoneCollapsed((prev) => !prev)}
           />
@@ -1606,6 +1644,7 @@ export default function TeamCompetitionPage({
               fillLaneWithTeam={fillLaneWithTeam}
               removeTeam={removeTeam}
               updateTeam={updateTeam}
+              showAthletes={!teamNamesOnly}
             />
           </TabsContent>
           <TabsContent value="lanes" className="flex-1 m-0">
@@ -1618,6 +1657,8 @@ export default function TeamCompetitionPage({
               returnFromNow={(laneId) => returnTeamToWaiting(laneId, "team")}
               returnFromReadyUp={(laneId) => returnTeamToWaiting(laneId, "readyUpTeam")}
               updateTeam={updateTeam}
+              teamNamesOnly={teamNamesOnly}
+              onToggleTeamNamesOnly={toggleTeamNamesOnly}
             />
           </TabsContent>
           <TabsContent value="done" className="flex-1 m-0">
@@ -1625,6 +1666,7 @@ export default function TeamCompetitionPage({
               teams={doneTeams}
               returnDoneTeamToLane={returnDoneTeamToLane}
               updateTeam={updateTeam}
+              showAthletes={!teamNamesOnly}
             />
           </TabsContent>
         </Tabs>

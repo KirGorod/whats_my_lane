@@ -108,6 +108,7 @@ export default function CompetitionPage() {
     useState<ExerciseStatus>("planned");
   const [competitionKind, setCompetitionKind] =
     useState<CompetitionKind>("veteran");
+  const [teamNamesOnly, setTeamNamesOnly] = useState(false);
   const [metaLoaded, setMetaLoaded] = useState(false);
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -126,6 +127,7 @@ export default function CompetitionPage() {
       setExerciseType(normalizeExerciseType(data?.type));
       setExerciseName(data?.name);
       setCompetitionKind(data?.competitionKind === "team" ? "team" : "veteran");
+      setTeamNamesOnly(!!data?.teamNamesOnly);
       if (
         data?.status === "planned" ||
         data?.status === "ongoing" ||
@@ -1362,6 +1364,7 @@ export default function CompetitionPage() {
         name={exerciseName}
         status={exerciseStatus}
         type={exerciseType}
+        teamNamesOnly={teamNamesOnly}
       />
     );
   }
