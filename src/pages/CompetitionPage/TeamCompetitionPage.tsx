@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -41,7 +42,6 @@ import {
   Trash2,
   Unlock,
   Users,
-  Wand2,
   Zap,
 } from "lucide-react";
 import {
@@ -153,6 +153,8 @@ type PreviewTeam = {
 };
 
 const API_BASE_URL = "https://apitrenvet.allstrongman.com/api";
+const DEFAULT_TEAM_ATHLETE_FIELDS = 4;
+const TEAM_ATHLETE_SUGGESTIONS_KEY = "whats_my_lane_team_athletes";
 
 const createDraftAthlete = (name = ""): DraftAthlete => ({
   id:
@@ -187,6 +189,47 @@ const protocolList = (payload: unknown): ProtocolEntry[] => {
   return [];
 };
 
+const createDraftAthletes = (count: number, names: string[] = []) => {
+  const rows = names.map((name) => createDraftAthlete(name));
+  while (rows.length < count) rows.push(createDraftAthlete());
+  return rows;
+};
+
+const loadAthleteSuggestions = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(TEAM_ATHLETE_SUGGESTIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) {
+      return parsed.filter((name): name is string => typeof name === "string");
+    }
+    if (!parsed || typeof parsed !== "object") return [];
+    return Array.from(
+      new Set(
+        Object.values(parsed)
+          .flatMap((names) => (Array.isArray(names) ? names : []))
+          .filter((name): name is string => typeof name === "string")
+      )
+    );
+  } catch {
+    return [];
+  }
+};
+
+const saveAthleteSuggestion = (name: string) => {
+  const cleanName = name.trim();
+  const current = loadAthleteSuggestions();
+  if (!cleanName) return current;
+  const next = Array.from(new Set([cleanName, ...current])).slice(0, 200);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(
+      TEAM_ATHLETE_SUGGESTIONS_KEY,
+      JSON.stringify(next)
+    );
+  }
+  return next;
+};
+
 const teamPayload = (team: Team): LaneTeam => ({
   id: team.id,
   name: team.name,
@@ -218,15 +261,19 @@ function SortableAthleteRow({
   index,
   canRemove,
   onChange,
-  onFillDummy,
+  onCommit,
+  onTabToNext,
   onRemove,
+  inputRef,
 }: {
   athlete: DraftAthlete;
   index: number;
   canRemove: boolean;
   onChange: (id: string, name: string) => void;
-  onFillDummy: (id: string) => void;
+  onCommit: (name: string) => void;
+  onTabToNext: (index: number, event: React.KeyboardEvent<HTMLInputElement>) => void;
   onRemove: (id: string) => void;
+  inputRef?: (element: HTMLInputElement | null) => void;
 }) {
   const {
     attributes,
@@ -252,32 +299,28 @@ function SortableAthleteRow({
         variant="outline"
         className="shrink-0 cursor-grab active:cursor-grabbing"
         title="Змінити порядок"
+        tabIndex={-1}
         {...attributes}
         {...listeners}
       >
         <GripVertical className="w-4 h-4" />
       </Button>
       <Input
+        ref={inputRef}
+        list="team-athlete-suggestions"
         value={athlete.name}
         placeholder={`Атлет ${index + 1}`}
         onChange={(e) => onChange(athlete.id, e.target.value)}
+        onBlur={(e) => onCommit(e.target.value)}
+        onKeyDown={(e) => onTabToNext(index, e)}
       />
-      <Button
-        type="button"
-        size="icon"
-        variant="outline"
-        className="shrink-0"
-        title={`Заповнити як Атлет ${index + 1}`}
-        onClick={() => onFillDummy(athlete.id)}
-      >
-        <Wand2 className="w-4 h-4" />
-      </Button>
       {canRemove && (
         <Button
           type="button"
           size="icon"
           variant="outline"
           className="shrink-0"
+          tabIndex={-1}
           onClick={() => onRemove(athlete.id)}
         >
           <Trash2 className="w-4 h-4" />
@@ -302,9 +345,11 @@ function TeamFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [athletes, setAthletes] = useState<DraftAthlete[]>([
-    createDraftAthlete(),
-  ]);
+  const [athletes, setAthletes] = useState<DraftAthlete[]>(
+    createDraftAthletes(DEFAULT_TEAM_ATHLETE_FIELDS)
+  );
+  const [athleteSuggestions, setAthleteSuggestions] = useState<string[]>([]);
+  const athleteInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -314,16 +359,21 @@ function TeamFormDialog({
   useEffect(() => {
     if (!open) return;
     setName(initialTeam?.name ?? "");
+    setAthleteSuggestions(loadAthleteSuggestions());
     setAthletes(
       initialTeam?.athletes?.length
-        ? initialTeam.athletes.map((athlete) => createDraftAthlete(athlete))
-        : [createDraftAthlete()]
+        ? createDraftAthletes(
+            Math.max(DEFAULT_TEAM_ATHLETE_FIELDS, initialTeam.athletes.length),
+            initialTeam.athletes
+          )
+        : createDraftAthletes(DEFAULT_TEAM_ATHLETE_FIELDS)
     );
   }, [initialTeam, open]);
 
   const reset = () => {
     setName("");
-    setAthletes([createDraftAthlete()]);
+    setAthletes(createDraftAthletes(DEFAULT_TEAM_ATHLETE_FIELDS));
+    athleteInputRefs.current = [];
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -333,6 +383,9 @@ function TeamFormDialog({
       .filter(Boolean);
     if (!name.trim()) return toast.error("Вкажіть назву команди");
 
+    cleanAthletes.forEach((athlete) => {
+      setAthleteSuggestions(saveAthleteSuggestion(athlete));
+    });
     await onSubmit({ name: name.trim(), athletes: cleanAthletes });
     reset();
     setOpen(false);
@@ -346,18 +399,25 @@ function TeamFormDialog({
     );
   };
 
-  const fillDummyAthlete = (id: string) => {
-    setAthletes((prev) =>
-      prev.map((athlete, index) =>
-        athlete.id === id
-          ? { ...athlete, name: `Атлет ${index + 1}` }
-          : athlete
-      )
-    );
+  const rememberAthlete = (athleteName: string) => {
+    const cleanName = athleteName.trim();
+    if (!cleanName) return;
+    setAthleteSuggestions(saveAthleteSuggestion(cleanName));
   };
 
   const removeAthlete = (id: string) => {
     setAthletes((prev) => prev.filter((athlete) => athlete.id !== id));
+  };
+
+  const handleAthleteTab = (
+    index: number,
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (event.key !== "Tab" || event.shiftKey) return;
+    const nextInput = athleteInputRefs.current[index + 1];
+    if (!nextInput) return;
+    event.preventDefault();
+    nextInput.focus();
   };
 
   const handleAthleteDragEnd = (event: DragEndEvent) => {
@@ -396,6 +456,11 @@ function TeamFormDialog({
 
             <div className="grid gap-2">
               <Label>Атлети</Label>
+              <datalist id="team-athlete-suggestions">
+                {athleteSuggestions.map((athlete) => (
+                  <option key={athlete} value={athlete} />
+                ))}
+              </datalist>
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -414,8 +479,12 @@ function TeamFormDialog({
                         index={index}
                         canRemove={athletes.length > 1}
                         onChange={updateAthlete}
-                        onFillDummy={fillDummyAthlete}
+                        onCommit={rememberAthlete}
+                        onTabToNext={handleAthleteTab}
                         onRemove={removeAthlete}
+                        inputRef={(element) => {
+                          athleteInputRefs.current[index] = element;
+                        }}
                       />
                     ))}
                   </div>
@@ -789,6 +858,20 @@ function TeamAthletesList({
   );
 }
 
+function TeamAthletesCount({ count }: { count: number }) {
+  const label =
+    count === 1
+      ? "атлет"
+      : count > 1 && count < 5
+        ? "атлети"
+        : "атлетів";
+  return (
+    <div className="mt-3 inline-flex rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700">
+      {count} {label}
+    </div>
+  );
+}
+
 function TeamCard({
   team,
   position,
@@ -796,7 +879,6 @@ function TeamCard({
   onRemove,
   onReturn,
   onEdit,
-  showAthletes = true,
   doneIndex,
   doneTotal,
 }: {
@@ -835,7 +917,7 @@ function TeamCard({
               {team.name}
             </div>
           </div>
-          {showAthletes && <TeamAthletesList athletes={team.athletes ?? []} />}
+          <TeamAthletesCount count={team.athletes?.length ?? 0} />
         </div>
       </div>
 
