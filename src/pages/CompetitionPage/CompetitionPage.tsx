@@ -110,6 +110,7 @@ export default function CompetitionPage() {
   const [competitionKind, setCompetitionKind] =
     useState<CompetitionKind>("veteran");
   const [teamNamesOnly, setTeamNamesOnly] = useState(false);
+  const [lanesPerRow, setLanesPerRow] = useState(3);
   const [metaLoaded, setMetaLoaded] = useState(false);
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -129,6 +130,11 @@ export default function CompetitionPage() {
       setExerciseName(data?.name);
       setCompetitionKind(data?.competitionKind === "team" ? "team" : "veteran");
       setTeamNamesOnly(!!data?.teamNamesOnly);
+      setLanesPerRow(
+        typeof data?.lanesPerRow === "number" && data.lanesPerRow >= 1
+          ? data.lanesPerRow
+          : 3
+      );
       if (
         data?.status === "planned" ||
         data?.status === "ongoing" ||
@@ -1387,6 +1393,7 @@ export default function CompetitionPage() {
         status={exerciseStatus}
         type={exerciseType}
         teamNamesOnly={teamNamesOnly}
+        lanesPerRow={lanesPerRow}
       />
     );
   }

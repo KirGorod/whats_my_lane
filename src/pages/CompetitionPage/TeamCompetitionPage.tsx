@@ -993,6 +993,7 @@ function TeamLaneCard({
 function TeamLanes({
   exerciseId,
   lanes,
+  lanesPerRow,
   autoFillLanes,
   clearLane,
   clearAllLanes,
@@ -1001,9 +1002,11 @@ function TeamLanes({
   updateTeam,
   teamNamesOnly,
   onToggleTeamNamesOnly,
+  onLanesPerRowChange,
 }: {
   exerciseId: string;
   lanes: TeamLaneModel[];
+  lanesPerRow: number;
   autoFillLanes: () => Promise<void> | void;
   clearLane: (laneId: number) => Promise<void> | void;
   clearAllLanes: () => Promise<void> | void;
@@ -1012,18 +1015,25 @@ function TeamLanes({
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
   teamNamesOnly: boolean;
   onToggleTeamNamesOnly: () => void;
+  onLanesPerRowChange: (value: number) => Promise<void> | void;
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [undoBusy, setUndoBusy] = useState(false);
   const [pendingLaneIds, setPendingLaneIds] = useState<Set<number>>(new Set());
+  const [isLg, setIsLg] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches
+  );
   const occupiedLanes = lanes.filter((lane) => lane.team).length;
-  const laneGridClass =
-    lanes.length <= 1
-      ? "grid-cols-1 max-w-3xl mx-auto w-full"
-      : lanes.length === 2
-      ? "grid-cols-1 lg:grid-cols-2"
-      : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3";
+  const gridCols = Math.min(lanesPerRow, Math.max(lanes.length, 1));
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsLg(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   const withLanePending =
     (laneId: number, action: () => Promise<void> | void) => async () => {
@@ -1040,7 +1050,6 @@ function TeamLanes({
     };
 
   const addLane = async () => {
-    if (lanes.length >= 3) return toast.error("Максимум 3 доріжки");
     const existingIds = lanes.map((lane) => lane.id).sort((a, b) => a - b);
     let newId = 1;
     while (existingIds.includes(newId)) newId += 1;
@@ -1142,11 +1151,49 @@ function TeamLanes({
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow">
       <div className="p-4 border-b border-gray-200">
-        <div className="hidden lg:flex items-center gap-2 mb-4">
-          <Flag className="w-5 h-5 text-gray-600" />
-          <h2 className="text-lg font-semibold">
-            {t("Lanes")} ({occupiedLanes}/{lanes.length})
-          </h2>
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <Flag className="w-5 h-5 text-gray-600 shrink-0" />
+            <h2 className="text-lg font-semibold whitespace-nowrap">
+              {t("Lanes")} ({occupiedLanes}/{lanes.length})
+            </h2>
+          </div>
+
+          {isAdmin && (
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                onClick={onToggleTeamNamesOnly}
+                size="sm"
+                variant={teamNamesOnly ? "default" : "outline"}
+              >
+                Лише назви
+              </Button>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="lanesPerRow" className="text-xs whitespace-nowrap">
+                  {t("LanesPerRow")}
+                </Label>
+                <Select
+                  value={String(lanesPerRow)}
+                  onValueChange={(value) => onLanesPerRowChange(Number(value))}
+                >
+                  <SelectTrigger
+                    id="lanesPerRow"
+                    size="sm"
+                    className="h-8 min-w-[4.25rem] shrink-0 px-2 [&_[data-slot=select-value]]:line-clamp-none"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
         </div>
 
         {isAdmin && (
@@ -1154,14 +1201,6 @@ function TeamLanes({
             <Button onClick={autoFillLanes} size="sm" variant="outline" className="flex-1">
               <Zap className="w-4 h-4 mr-1" />
               {t("AutoFill")}
-            </Button>
-            <Button
-              onClick={onToggleTeamNamesOnly}
-              size="sm"
-              variant={teamNamesOnly ? "default" : "outline"}
-              className="flex-1"
-            >
-              Лише назви
             </Button>
             <Button
               onClick={clearAllLanes}
@@ -1173,13 +1212,7 @@ function TeamLanes({
               <ArrowBigRightDash className="w-4 h-4 mr-1" />
               {t("NextRound")}
             </Button>
-            <Button
-              onClick={addLane}
-              size="sm"
-              variant="secondary"
-              className="flex-1"
-              disabled={lanes.length >= 3}
-            >
+            <Button onClick={addLane} size="sm" variant="outline" className="flex-1">
               <Plus className="w-4 h-4 mr-1" />
               {t("Lane")}
             </Button>
@@ -1217,7 +1250,18 @@ function TeamLanes({
         )}
       </div>
 
-      <div className={["grid gap-3 m-3", laneGridClass].join(" ")}>
+      <div
+        className={[
+          "grid gap-3 m-3",
+          lanes.length === 1 ? "max-w-3xl mx-auto w-full" : "",
+          !isLg ? "grid-cols-1" : "",
+        ].join(" ")}
+        style={
+          isLg
+            ? { gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }
+            : undefined
+        }
+      >
         {lanes.map((lane) => (
           <TeamLaneCard
             key={lane.id}
@@ -1334,12 +1378,14 @@ export default function TeamCompetitionPage({
   status,
   type,
   teamNamesOnly,
+  lanesPerRow,
 }: {
   exerciseId: string;
   name?: string;
   status: ExerciseStatus;
   type: ExerciseType;
   teamNamesOnly: boolean;
+  lanesPerRow: number;
 }) {
   const { t } = useTranslation();
   const { showAthleteNames, toggleShowAthleteNames } = useAdminTeamAthletesView();
@@ -1769,6 +1815,12 @@ export default function TeamCompetitionPage({
     });
   };
 
+  const setLanesPerRow = async (value: number) => {
+    await updateDoc(doc(db, "exercises", exerciseId), {
+      lanesPerRow: value,
+    });
+  };
+
   const activeLanesCount = lanes.filter((lane) => !!lane.team).length;
 
   return (
@@ -1800,6 +1852,7 @@ export default function TeamCompetitionPage({
           <TeamLanes
             exerciseId={exerciseId}
             lanes={lanes}
+            lanesPerRow={lanesPerRow}
             autoFillLanes={autoFillLanes}
             clearLane={clearLane}
             clearAllLanes={clearAllLanes}
@@ -1808,6 +1861,7 @@ export default function TeamCompetitionPage({
             updateTeam={updateTeam}
             teamNamesOnly={teamNamesOnly}
             onToggleTeamNamesOnly={toggleTeamNamesOnly}
+            onLanesPerRowChange={setLanesPerRow}
           />
         </div>
         <div
@@ -1865,6 +1919,7 @@ export default function TeamCompetitionPage({
             <TeamLanes
               exerciseId={exerciseId}
               lanes={lanes}
+              lanesPerRow={lanesPerRow}
               autoFillLanes={autoFillLanes}
               clearLane={clearLane}
               clearAllLanes={clearAllLanes}
@@ -1873,6 +1928,7 @@ export default function TeamCompetitionPage({
               updateTeam={updateTeam}
               teamNamesOnly={teamNamesOnly}
               onToggleTeamNamesOnly={toggleTeamNamesOnly}
+              onLanesPerRowChange={setLanesPerRow}
             />
           </TabsContent>
           <TabsContent value="done" className="flex-1 m-0">
