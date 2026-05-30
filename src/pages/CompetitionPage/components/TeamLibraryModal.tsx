@@ -88,6 +88,7 @@ export function TeamLibraryModal({
     return teams.filter(
       (team) =>
         team.name.toLowerCase().includes(term) ||
+        team.city?.toLowerCase().includes(term) ||
         team.athletes.some((athlete) => athlete.toLowerCase().includes(term))
     );
   }, [teams, searchTerm]);
@@ -131,6 +132,7 @@ export function TeamLibraryModal({
     try {
       await addTeam({
         name: team.name,
+        ...(team.city ? { city: team.city } : {}),
         athletes: team.athletes ?? [],
       });
     } catch (err) {
@@ -158,7 +160,7 @@ export function TeamLibraryModal({
 
         <div className="flex items-center justify-between gap-2">
           <Input
-            placeholder="Пошук команди або атлета"
+            placeholder="Пошук команди, міста або атлета"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1"
@@ -195,6 +197,11 @@ export function TeamLibraryModal({
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm truncate">{team.name}</p>
+                  {team.city ? (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {team.city}
+                    </p>
+                  ) : null}
                   <CompactAthletesList athletes={team.athletes} />
                 </div>
                 <div className="flex items-center gap-1 shrink-0">

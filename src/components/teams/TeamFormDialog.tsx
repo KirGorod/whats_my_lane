@@ -200,6 +200,7 @@ export function TeamFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [city, setCity] = useState("");
   const [athletes, setAthletes] = useState<DraftAthlete[]>(
     createDraftAthletes(DEFAULT_TEAM_ATHLETE_FIELDS)
   );
@@ -208,6 +209,7 @@ export function TeamFormDialog({
     new Set()
   );
   const [submitting, setSubmitting] = useState(false);
+  const cityInputRef = useRef<HTMLInputElement | null>(null);
   const athleteInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const pendingAthleteFocusIndex = useRef<number | null>(null);
 
@@ -230,6 +232,7 @@ export function TeamFormDialog({
   useEffect(() => {
     if (!open) return;
     setName(initialTeam?.name ?? "");
+    setCity(initialTeam?.city ?? "");
     setAthleteSuggestions(loadAthleteSuggestions());
     setAthletes(
       initialTeam?.athletes?.length
@@ -259,6 +262,7 @@ export function TeamFormDialog({
 
   const reset = () => {
     setName("");
+    setCity("");
     setAthletes(createDraftAthletes(DEFAULT_TEAM_ATHLETE_FIELDS));
     athleteInputRefs.current = [];
     pendingAthleteFocusIndex.current = null;
@@ -268,6 +272,7 @@ export function TeamFormDialog({
     const cleanAthletes = athletes
       .map((athlete) => athlete.name.trim())
       .filter(Boolean);
+    const cleanCity = city.trim();
     if (!name.trim()) {
       toast.error("Вкажіть назву команди");
       return null;
@@ -275,7 +280,11 @@ export function TeamFormDialog({
     cleanAthletes.forEach((athlete) => {
       setAthleteSuggestions(saveAthleteSuggestion(athlete));
     });
-    return { name: name.trim(), athletes: cleanAthletes };
+    return {
+      name: name.trim(),
+      ...(cleanCity ? { city: cleanCity } : {}),
+      athletes: cleanAthletes,
+    };
   };
 
   const saveToLibraryIfNew = async (payload: TeamFormValues) => {
@@ -353,6 +362,14 @@ export function TeamFormDialog({
     event: React.KeyboardEvent<HTMLInputElement>
   ) => {
     if (event.key !== "Tab" || event.shiftKey) return;
+    const cityInput = cityInputRef.current;
+    if (!cityInput) return;
+    event.preventDefault();
+    cityInput.focus();
+  };
+
+  const handleCityTab = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Tab" || event.shiftKey) return;
     const firstAthleteInput = athleteInputRefs.current[0];
     if (!firstAthleteInput) return;
     event.preventDefault();
@@ -404,6 +421,18 @@ export function TeamFormDialog({
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={handleTeamNameTab}
                 required
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="team-city">Місто</Label>
+              <Input
+                id="team-city"
+                ref={cityInputRef}
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                onKeyDown={handleCityTab}
+                placeholder="Необов'язково"
               />
             </div>
 

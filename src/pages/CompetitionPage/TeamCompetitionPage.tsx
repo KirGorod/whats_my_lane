@@ -169,6 +169,7 @@ const protocolList = (payload: unknown): ProtocolEntry[] => {
 const teamPayload = (team: Team): LaneTeam => ({
   id: team.id,
   name: team.name,
+  ...(team.city ? { city: team.city } : {}),
   athletes: team.athletes ?? [],
 });
 
@@ -664,6 +665,9 @@ function TeamCard({
               {team.name}
             </div>
           </div>
+          {team.city ? (
+            <p className="text-sm text-muted-foreground mt-0.5">{team.city}</p>
+          ) : null}
           {showAthleteList ? (
             <TeamAthletesList
               athletes={team.athletes ?? []}
@@ -776,6 +780,7 @@ function TeamList({
     return teams.filter(
       (team) =>
         team.name.toLowerCase().includes(term) ||
+        team.city?.toLowerCase().includes(term) ||
         team.athletes?.some((athlete) => athlete.toLowerCase().includes(term))
     );
   }, [teams, searchTerm]);
@@ -959,6 +964,11 @@ function TeamBlock({
           <div className="text-2xl xl:text-4xl font-semibold break-words">
             {team.name}
           </div>
+          {team.city ? (
+            <p className="text-base xl:text-xl text-muted-foreground mt-1">
+              {team.city}
+            </p>
+          ) : null}
           {showAthletes && <TeamAthletesList athletes={team.athletes} centered />}
         </div>
       ) : (
@@ -1659,15 +1669,18 @@ export default function TeamCompetitionPage({
   };
 
   const updateTeam = async (team: Team, patch: Omit<Team, "id">) => {
+    const cleanCity = patch.city?.trim();
     const updatedTeam: LaneTeam = {
       id: team.id,
       name: patch.name.trim(),
+      ...(cleanCity ? { city: cleanCity } : {}),
       athletes: patch.athletes ?? [],
     };
     const batch = writeBatch(db);
     if (!isSyntheticTeam(team)) {
       batch.update(doc(db, "exercises", exerciseId, "teams", team.id), {
         name: updatedTeam.name,
+        city: cleanCity || null,
         athletes: updatedTeam.athletes,
       });
     }

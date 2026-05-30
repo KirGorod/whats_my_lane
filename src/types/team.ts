@@ -3,13 +3,14 @@ export type TeamStatus = "waiting" | "lane" | "ready" | "done";
 export interface Team {
   id: string;
   name: string;
+  city?: string;
   athletes: string[];
   status?: TeamStatus;
   orderRank?: number;
   order?: number;
 }
 
-export type LaneTeam = Pick<Team, "id" | "name" | "athletes">;
+export type LaneTeam = Pick<Team, "id" | "name" | "city" | "athletes">;
 
 export interface TeamLaneModel {
   id: number;

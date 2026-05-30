@@ -34,13 +34,21 @@ export function subscribeTeamLibrary(
   return onSnapshot(
     collection(db, COLLECTION),
     (snap) => {
-      const teams = snap.docs.map((d) => ({
-        id: d.id,
-        name: String(d.data().name ?? ""),
-        athletes: Array.isArray(d.data().athletes)
-          ? (d.data().athletes as string[])
-          : [],
-      }));
+      const teams = snap.docs.map((d) => {
+        const data = d.data();
+        const city =
+          typeof data.city === "string" && data.city.trim()
+            ? data.city.trim()
+            : undefined;
+        return {
+          id: d.id,
+          name: String(data.name ?? ""),
+          ...(city ? { city } : {}),
+          athletes: Array.isArray(data.athletes)
+            ? (data.athletes as string[])
+            : [],
+        };
+      });
       onChange(sortByName(teams));
     },
     (err) => onError?.(err)
@@ -50,6 +58,7 @@ export function subscribeTeamLibrary(
 export async function createSavedTeam(team: SavedTeamInput) {
   await addDoc(collection(db, COLLECTION), {
     name: team.name.trim(),
+    city: team.city?.trim() || null,
     athletes: team.athletes ?? [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -59,6 +68,7 @@ export async function createSavedTeam(team: SavedTeamInput) {
 export async function updateSavedTeam(id: string, team: SavedTeamInput) {
   await updateDoc(doc(db, COLLECTION, id), {
     name: team.name.trim(),
+    city: team.city?.trim() || null,
     athletes: team.athletes ?? [],
     updatedAt: serverTimestamp(),
   });
