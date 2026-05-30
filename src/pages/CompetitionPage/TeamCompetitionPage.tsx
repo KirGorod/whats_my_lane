@@ -30,6 +30,7 @@ import {
   ChevronRight,
   Download,
   Flag,
+  Info,
   Pencil,
   Lock,
   List,
@@ -57,6 +58,11 @@ import { TeamFormDialog } from "../../components/teams/TeamFormDialog";
 import ScrollToTopButton from "../../components/main/ScrollToTopButton";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../components/ui/popover";
 import { Label } from "../../components/ui/label";
 import {
   Dialog,
@@ -555,17 +561,59 @@ function TeamAthletesList({
   );
 }
 
-function TeamAthletesCount({ count }: { count: number }) {
+function TeamAthletesCount({
+  count,
+  athletes,
+}: {
+  count: number;
+  athletes: string[];
+}) {
   const label =
     count === 1
       ? "атлет"
       : count > 1 && count < 5
         ? "атлети"
         : "атлетів";
+
   return (
-    <div className="mt-3 inline-flex rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700">
-      {count} {label}
-    </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Показати атлетів команди"
+          className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-slate-300 active:bg-slate-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <span>
+            {count} {label}
+          </span>
+          <Info className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        className="w-auto min-w-[10rem] max-w-[min(20rem,calc(100vw-2rem))] border-lime-300 bg-lime-200 p-3"
+      >
+        <p className="text-sm font-medium text-gray-900">Атлети:</p>
+        {athletes.length === 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground">Немає атлетів</p>
+        ) : (
+          <div className="mt-1 space-y-1">
+            {athletes.map((athlete, index) => (
+              <div
+                key={`${athlete}-${index}`}
+                className="flex items-start gap-2 text-sm text-gray-700 break-words"
+              >
+                <span className="shrink-0 text-gray-500" aria-hidden>
+                  •
+                </span>
+                <span>{athlete}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -606,13 +654,13 @@ function TeamCard({
       )}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 pr-10">
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             {number ? (
-              <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-xs shrink-0">
+              <span className="mt-0.5 px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-xs shrink-0">
                 #{number}
               </span>
             ) : null}
-            <div className="font-semibold text-gray-900 break-words text-xl xl:text-3xl">
+            <div className="min-w-0 font-semibold text-gray-900 break-words text-base leading-snug xl:text-lg">
               {team.name}
             </div>
           </div>
@@ -622,7 +670,10 @@ function TeamCard({
               compact
             />
           ) : (
-            <TeamAthletesCount count={team.athletes?.length ?? 0} />
+            <TeamAthletesCount
+              count={team.athletes?.length ?? 0}
+              athletes={team.athletes ?? []}
+            />
           )}
         </div>
       </div>
