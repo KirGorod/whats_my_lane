@@ -8,9 +8,19 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { normalizeTeamName } from "./teamNames";
 import type { SavedTeam, SavedTeamInput } from "../types/teamLibrary";
 
 const COLLECTION = "teamLibrary";
+
+export function collectLibraryTeamNameKeys(teams: SavedTeam[]): Set<string> {
+  const keys = new Set<string>();
+  teams.forEach((team) => {
+    const key = team.name?.trim();
+    if (key) keys.add(normalizeTeamName(key));
+  });
+  return keys;
+}
 
 const sortByName = (teams: SavedTeam[]) =>
   [...teams].sort((a, b) =>

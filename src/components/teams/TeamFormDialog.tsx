@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -23,8 +24,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { GripVertical, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  collectLibraryTeamNameKeys,
+  createSavedTeam,
+  subscribeTeamLibrary,
+} from "../../lib/teamLibrary";
+import { isTeamNameTaken, normalizeTeamName } from "../../lib/teamNames";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -178,12 +185,18 @@ export function TeamFormDialog({
   submitLabel,
   initialTeam,
   onSubmit,
+  enableLibrarySave = false,
+  saveToLibraryLabel,
+  mode = "create",
 }: {
   trigger: ReactNode;
   title: string;
   submitLabel: string;
   initialTeam?: TeamFormValues & { id?: string };
   onSubmit: (team: TeamFormValues) => Promise<void> | void;
+  enableLibrarySave?: boolean;
+  saveToLibraryLabel?: string;
+  mode?: "create" | "edit";
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -191,7 +204,22 @@ export function TeamFormDialog({
     createDraftAthletes(DEFAULT_TEAM_ATHLETE_FIELDS)
   );
   const [athleteSuggestions, setAthleteSuggestions] = useState<string[]>([]);
+  const [libraryTeamNameKeys, setLibraryTeamNameKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [submitting, setSubmitting] = useState(false);
   const athleteInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  const libraryButtonLabel =
+    saveToLibraryLabel ??
+    (mode === "edit"
+      ? "Зберегти та зберегти в бібліотеку"
+      : "Додати та зберегти в бібліотеку");
+
+  const nameInLibrary = useMemo(
+    () => isTeamNameTaken(name, libraryTeamNameKeys),
+    [name, libraryTeamNameKeys]
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -212,26 +240,80 @@ export function TeamFormDialog({
     );
   }, [initialTeam, open]);
 
+  useEffect(() => {
+    if (!open || !enableLibrarySave) return;
+    const unsub = subscribeTeamLibrary(
+      (teams) => setLibraryTeamNameKeys(collectLibraryTeamNameKeys(teams)),
+      () => toast.error("Не вдалося завантажити бібліотеку команд")
+    );
+    return () => unsub();
+  }, [open, enableLibrarySave]);
+
   const reset = () => {
     setName("");
     setAthletes(createDraftAthletes(DEFAULT_TEAM_ATHLETE_FIELDS));
     athleteInputRefs.current = [];
   };
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const buildTeamPayload = (): TeamFormValues | null => {
     const cleanAthletes = athletes
       .map((athlete) => athlete.name.trim())
       .filter(Boolean);
-    if (!name.trim()) return toast.error("Вкажіть назву команди");
-
+    if (!name.trim()) {
+      toast.error("Вкажіть назву команди");
+      return null;
+    }
     cleanAthletes.forEach((athlete) => {
       setAthleteSuggestions(saveAthleteSuggestion(athlete));
     });
-    await onSubmit({ name: name.trim(), athletes: cleanAthletes });
-    reset();
-    setOpen(false);
+    return { name: name.trim(), athletes: cleanAthletes };
   };
+
+  const saveToLibraryIfNew = async (payload: TeamFormValues) => {
+    if (!enableLibrarySave) return;
+    if (isTeamNameTaken(payload.name, libraryTeamNameKeys)) {
+      toast.info("Команда вже є в бібліотеці");
+      return;
+    }
+    try {
+      await createSavedTeam(payload);
+      setLibraryTeamNameKeys((prev) => {
+        const next = new Set(prev);
+        next.add(normalizeTeamName(payload.name));
+        return next;
+      });
+      toast.success("Команду збережено в бібліотеці");
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося зберегти команду в бібліотеці");
+      throw err;
+    }
+  };
+
+  const handleSubmit = async (
+    event: React.FormEvent,
+    alsoSaveToLibrary: boolean
+  ) => {
+    event.preventDefault();
+    const payload = buildTeamPayload();
+    if (!payload) return;
+
+    setSubmitting(true);
+    try {
+      await onSubmit(payload);
+      if (alsoSaveToLibrary) {
+        await saveToLibraryIfNew(payload);
+      }
+      reset();
+      setOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submit = (event: React.FormEvent) => void handleSubmit(event, false);
 
   const updateAthlete = (id: string, nextName: string) => {
     setAthletes((prev) =>
@@ -277,7 +359,11 @@ export function TeamFormDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent
+        className={
+          enableLibrarySave ? "sm:max-w-[520px]" : "sm:max-w-[480px]"
+        }
+      >
         <form onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -343,14 +429,64 @@ export function TeamFormDialog({
             </div>
           </div>
 
-          <DialogFooter className="mt-4">
-            <DialogClose asChild>
-              <Button variant="outline" type="button">
-                Скасувати
+          {enableLibrarySave ? (
+            <div className="mt-4 flex w-full flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-9 w-full whitespace-normal border-lime-400 bg-lime-100 px-3 py-2 text-center text-sm font-medium text-lime-950 shadow-xs hover:bg-lime-200 hover:text-lime-950 disabled:bg-lime-50 disabled:text-lime-600"
+                disabled={submitting || nameInLibrary}
+                title={
+                  nameInLibrary ? "Команда вже в бібліотеці" : undefined
+                }
+                onClick={(event) => void handleSubmit(event, true)}
+              >
+                {submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  libraryButtonLabel
+                )}
               </Button>
-            </DialogClose>
-            <Button type="submit">{submitLabel}</Button>
-          </DialogFooter>
+              <div className="grid grid-cols-2 gap-2">
+                <DialogClose asChild>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    className="w-full"
+                    disabled={submitting}
+                  >
+                    Скасувати
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    submitLabel
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <DialogFooter className="mt-4">
+              <DialogClose asChild>
+                <Button variant="outline" type="button" disabled={submitting}>
+                  Скасувати
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  submitLabel
+                )}
+              </Button>
+            </DialogFooter>
+          )}
         </form>
       </DialogContent>
     </Dialog>

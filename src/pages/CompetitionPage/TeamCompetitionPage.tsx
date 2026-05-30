@@ -32,6 +32,7 @@ import {
   Flag,
   Pencil,
   Lock,
+  List,
   Loader2,
   Plus,
   RotateCcw,
@@ -49,6 +50,7 @@ import {
   normalizeTeamName,
 } from "../../lib/teamNames";
 import { useAuth } from "../../context/AuthContext";
+import { useAdminTeamAthletesView } from "../../hooks/useAdminTeamAthletesView";
 import CompetitionHeader from "./components/CompetitionHeader";
 import { TeamLibraryModal } from "./components/TeamLibraryModal";
 import { TeamFormDialog } from "../../components/teams/TeamFormDialog";
@@ -193,6 +195,9 @@ function AddTeamDialog({
     <TeamFormDialog
       title="Додати команду"
       submitLabel="Додати"
+      mode="create"
+      enableLibrarySave
+      saveToLibraryLabel="Додати та зберегти в бібліотеку"
       onSubmit={addTeam}
       trigger={
         <Button variant="ghost" size="icon" title="Додати команду">
@@ -483,6 +488,9 @@ function EditTeamDialog({
     <TeamFormDialog
       title="Редагувати команду"
       submitLabel="Зберегти"
+      mode="edit"
+      enableLibrarySave
+      saveToLibraryLabel="Зберегти та зберегти в бібліотеку"
       initialTeam={team}
       onSubmit={(patch) => updateTeam(team, patch)}
       trigger={
@@ -502,10 +510,32 @@ function EditTeamDialog({
 function TeamAthletesList({
   athletes,
   centered = false,
+  compact = false,
 }: {
   athletes: string[];
   centered?: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    if (!athletes.length) {
+      return (
+        <p className="mt-2 text-xs text-muted-foreground">Немає атлетів</p>
+      );
+    }
+    return (
+      <div className="mt-2 space-y-0.5 text-left">
+        {athletes.map((athlete, index) => (
+          <div
+            key={`${athlete}-${index}`}
+            className="text-sm leading-snug text-gray-600 break-words"
+          >
+            {athlete}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       className={[
@@ -546,6 +576,7 @@ function TeamCard({
   onRemove,
   onReturn,
   onEdit,
+  showAthleteNames = false,
   doneIndex,
   doneTotal,
 }: {
@@ -555,11 +586,12 @@ function TeamCard({
   onRemove?: (team: Team) => Promise<void> | void;
   onReturn?: (team: Team) => Promise<void> | void;
   onEdit?: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
-  showAthletes?: boolean;
+  showAthleteNames?: boolean;
   doneIndex?: number;
   doneTotal?: number;
 }) {
   const { isAdmin } = useAuth();
+  const showAthleteList = isAdmin && showAthleteNames;
   const number =
     typeof doneIndex === "number" && typeof doneTotal === "number"
       ? doneTotal - doneIndex
@@ -584,7 +616,14 @@ function TeamCard({
               {team.name}
             </div>
           </div>
-          <TeamAthletesCount count={team.athletes?.length ?? 0} />
+          {showAthleteList ? (
+            <TeamAthletesList
+              athletes={team.athletes ?? []}
+              compact
+            />
+          ) : (
+            <TeamAthletesCount count={team.athletes?.length ?? 0} />
+          )}
         </div>
       </div>
 
@@ -634,7 +673,8 @@ function TeamList({
   fillLaneWithTeam,
   removeTeam,
   updateTeam,
-  showAthletes = true,
+  showAthleteNames = false,
+  onToggleShowAthleteNames,
   collapsed = false,
   onToggleCollapse,
 }: {
@@ -645,7 +685,8 @@ function TeamList({
   fillLaneWithTeam: (team: Team) => Promise<void> | void;
   removeTeam: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
-  showAthletes?: boolean;
+  showAthleteNames?: boolean;
+  onToggleShowAthleteNames?: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
@@ -720,12 +761,29 @@ function TeamList({
 
       {!collapsed && (
         <>
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 border-t border-gray-200 space-y-2">
             <Input
               placeholder="Пошук команди або атлета"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+            {isAdmin && onToggleShowAthleteNames && (
+              <Button
+                type="button"
+                size="sm"
+                variant={showAthleteNames ? "default" : "outline"}
+                className="w-full"
+                title={
+                  showAthleteNames
+                    ? "Сховати імена атлетів"
+                    : "Показати імена атлетів"
+                }
+                onClick={onToggleShowAthleteNames}
+              >
+                <List className="w-4 h-4 mr-1" />
+                Показати атлетів
+              </Button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -742,7 +800,7 @@ function TeamList({
                   onFill={fillLaneWithTeam}
                   onRemove={removeTeam}
                   onEdit={updateTeam}
-                  showAthletes={showAthletes}
+                  showAthleteNames={showAthleteNames}
                 />
               ))
             )}
@@ -1191,14 +1249,14 @@ function DoneTeamsList({
   teams,
   returnDoneTeamToLane,
   updateTeam,
-  showAthletes = true,
+  showAthleteNames = false,
   collapsed = false,
   onToggleCollapse,
 }: {
   teams: Team[];
   returnDoneTeamToLane: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
-  showAthletes?: boolean;
+  showAthleteNames?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
@@ -1260,7 +1318,7 @@ function DoneTeamsList({
                 doneTotal={teams.length}
                 onReturn={returnDoneTeamToLane}
                 onEdit={updateTeam}
-                showAthletes={showAthletes}
+                showAthleteNames={showAthleteNames}
               />
             ))
           )}
@@ -1284,6 +1342,7 @@ export default function TeamCompetitionPage({
   teamNamesOnly: boolean;
 }) {
   const { t } = useTranslation();
+  const { showAthleteNames, toggleShowAthleteNames } = useAdminTeamAthletesView();
   const [activeTab, setActiveTab] = useState<"teams" | "lanes" | "done">(
     () =>
       typeof window !== "undefined" && window.innerWidth < 1024
@@ -1731,7 +1790,8 @@ export default function TeamCompetitionPage({
             fillLaneWithTeam={fillLaneWithTeam}
             removeTeam={removeTeam}
             updateTeam={updateTeam}
-            showAthletes={!teamNamesOnly}
+            showAthleteNames={showAthleteNames}
+            onToggleShowAthleteNames={toggleShowAthleteNames}
             collapsed={teamsCollapsed}
             onToggleCollapse={() => setTeamsCollapsed((prev) => !prev)}
           />
@@ -1760,7 +1820,7 @@ export default function TeamCompetitionPage({
             teams={doneTeams}
             returnDoneTeamToLane={returnDoneTeamToLane}
             updateTeam={updateTeam}
-            showAthletes={!teamNamesOnly}
+            showAthleteNames={showAthleteNames}
             collapsed={doneCollapsed}
             onToggleCollapse={() => setDoneCollapsed((prev) => !prev)}
           />
@@ -1797,7 +1857,8 @@ export default function TeamCompetitionPage({
               fillLaneWithTeam={fillLaneWithTeam}
               removeTeam={removeTeam}
               updateTeam={updateTeam}
-              showAthletes={!teamNamesOnly}
+              showAthleteNames={showAthleteNames}
+              onToggleShowAthleteNames={toggleShowAthleteNames}
             />
           </TabsContent>
           <TabsContent value="lanes" className="flex-1 m-0">
@@ -1819,7 +1880,7 @@ export default function TeamCompetitionPage({
               teams={doneTeams}
               returnDoneTeamToLane={returnDoneTeamToLane}
               updateTeam={updateTeam}
-              showAthletes={!teamNamesOnly}
+              showAthleteNames={showAthleteNames}
             />
           </TabsContent>
         </Tabs>
