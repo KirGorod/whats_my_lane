@@ -673,6 +673,8 @@ function TeamList({
   fillLaneWithTeam,
   removeTeam,
   updateTeam,
+  removeAllTeams,
+  undoRemoveAllTeams,
   showAthleteNames = false,
   onToggleShowAthleteNames,
   collapsed = false,
@@ -685,6 +687,8 @@ function TeamList({
   fillLaneWithTeam: (team: Team) => Promise<void> | void;
   removeTeam: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  removeAllTeams?: () => Promise<void> | void;
+  undoRemoveAllTeams?: () => Promise<void> | void;
   showAthleteNames?: boolean;
   onToggleShowAthleteNames?: () => void;
   collapsed?: boolean;
@@ -692,6 +696,29 @@ function TeamList({
 }) {
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+
+  const handleRemoveAll = async () => {
+    if (!removeAllTeams) return;
+    const confirm = window.prompt(
+      "Введіть 'remove' або 'видалити' щоб підтвердити видалення ВСІХ команд"
+    );
+    if (!confirm) return;
+    const ok =
+      confirm.trim().toLowerCase() === "remove" ||
+      confirm.trim().toLowerCase() === "видалити";
+    if (!ok) {
+      toast.error("Потрібно ввести 'remove' або 'видалити'");
+      return;
+    }
+    await removeAllTeams();
+  };
+
+  const handleUndoRemoveAll = async () => {
+    if (!undoRemoveAllTeams) return;
+    const ok = window.confirm("Відновити останніх видалених команд?");
+    if (!ok) return;
+    await undoRemoveAllTeams();
+  };
   const filteredTeams = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return teams;
@@ -755,6 +782,25 @@ function TeamList({
             />
             <LoadProtocolTeamsDialog addTeamsBulk={addTeamsBulk} />
             <AddTeamDialog addTeam={addTeam} />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-red-600 hover:text-red-800"
+              title="Видалити всіх"
+              onClick={handleRemoveAll}
+            >
+              <Trash2 className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-blue-600 hover:text-blue-800"
+              title="Відмінити останнє видалення"
+              onClick={handleUndoRemoveAll}
+              disabled={!undoRemoveAllTeams}
+            >
+              <RotateCcw className="w-5 h-5" />
+            </Button>
           </div>
         )}
       </div>
@@ -1293,6 +1339,8 @@ function DoneTeamsList({
   teams,
   returnDoneTeamToLane,
   updateTeam,
+  removeAllDone,
+  undoRemoveAllDone,
   showAthleteNames = false,
   collapsed = false,
   onToggleCollapse,
@@ -1300,10 +1348,34 @@ function DoneTeamsList({
   teams: Team[];
   returnDoneTeamToLane: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  removeAllDone?: () => Promise<void> | void;
+  undoRemoveAllDone?: () => Promise<void> | void;
   showAthleteNames?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
+  const { isAdmin } = useAuth();
+
+  const handleRemoveAllDone = async () => {
+    if (!removeAllDone) return;
+    const confirm = window.prompt(
+      "Введіть 'remove' або 'видалити' щоб підтвердити видалення усіх завершених команд"
+    );
+    if (!confirm) return;
+    const ok =
+      confirm.trim().toLowerCase() === "remove" ||
+      confirm.trim().toLowerCase() === "видалити";
+    if (!ok) return;
+    await removeAllDone();
+  };
+
+  const handleUndoRemoveAllDone = async () => {
+    if (!undoRemoveAllDone) return;
+    const ok = window.confirm("Відновити останніх видалених завершених команд?");
+    if (!ok) return;
+    await undoRemoveAllDone();
+  };
+
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow">
       <div className="p-4 border-b border-gray-200">
@@ -1329,22 +1401,46 @@ function DoneTeamsList({
               Завершено ({teams.length})
             </h2>
           </div>
-          {onToggleCollapse && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              title={collapsed ? "Показати завершені" : "Сховати завершені"}
-              onClick={onToggleCollapse}
-            >
-              {collapsed ? (
-                <ChevronLeft className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {isAdmin && removeAllDone && !collapsed && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-red-600 hover:text-red-800"
+                title="Видалити всіх завершених"
+                onClick={handleRemoveAllDone}
+              >
+                <Trash2 className="w-5 h-5" />
+              </Button>
+            )}
+            {isAdmin && undoRemoveAllDone && !collapsed && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-blue-600 hover:text-blue-800"
+                title="Відмінити останнє видалення"
+                onClick={handleUndoRemoveAllDone}
+              >
+                <RotateCcw className="w-5 h-5" />
+              </Button>
+            )}
+            {onToggleCollapse && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title={collapsed ? "Показати завершені" : "Сховати завершені"}
+                onClick={onToggleCollapse}
+              >
+                {collapsed ? (
+                  <ChevronLeft className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
       {!collapsed && (
@@ -1558,6 +1654,103 @@ export default function TeamCompetitionPage({
       undone: false,
     } satisfies TeamActionHistory);
     await batch.commit();
+  };
+
+  const removeAllTeamsByStatus = async (status: "waiting" | "done") => {
+    try {
+      const q = query(
+        collection(db, "exercises", exerciseId, "teams"),
+        where("status", "==", status)
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        toast.info(status === "waiting" ? "Список порожній" : "Завершених немає");
+        return;
+      }
+
+      const snapshot = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      await addDoc(collection(db, "exercises", exerciseId, "removalLogs"), {
+        status,
+        teams: snapshot,
+        createdAt: serverTimestamp(),
+      });
+
+      const batch = writeBatch(db);
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      toast.success(
+        status === "waiting"
+          ? "Усі команди видалені"
+          : "Усі завершені команди видалені"
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося очистити список");
+    }
+  };
+
+  const undoLastTeamRemoval = async (status: "waiting" | "done") => {
+    try {
+      const logQuery = query(
+        collection(db, "exercises", exerciseId, "removalLogs"),
+        where("status", "==", status),
+        orderBy("createdAt", "desc"),
+        limit(1)
+      );
+      const logSnap = await getDocs(logQuery);
+      if (logSnap.empty) {
+        toast.info("Немає що відновити");
+        return;
+      }
+      const logDoc = logSnap.docs[0];
+      const data = logDoc.data() as { teams?: Team[] };
+      const teamsToRestore: Team[] = data.teams ?? [];
+      if (!teamsToRestore.length) {
+        toast.info("Лог порожній");
+        return;
+      }
+
+      const batch = writeBatch(db);
+      let baseRank = 0;
+      if (status === "waiting") {
+        baseRank = Math.max(...teams.map((t) => t.orderRank ?? 0), 0);
+      }
+
+      teamsToRestore.forEach((team, idx) => {
+        const ref = team.id
+          ? doc(db, "exercises", exerciseId, "teams", team.id)
+          : doc(collection(db, "exercises", exerciseId, "teams"));
+
+        const payload: Record<string, unknown> = {
+          ...team,
+          status: team.status ?? status,
+          createdAt: serverTimestamp(),
+        };
+
+        if (status === "waiting") {
+          payload.orderRank = baseRank + idx + 1;
+        } else if (status === "done") {
+          payload.order = team.order ?? Date.now() - idx;
+        }
+
+        Object.keys(payload).forEach((k) => {
+          if (payload[k] === undefined) delete payload[k];
+        });
+
+        batch.set(ref, payload);
+      });
+
+      batch.delete(logDoc.ref);
+      await batch.commit();
+      toast.success(
+        status === "waiting"
+          ? "Повернули видалені команди"
+          : "Повернули завершені команди"
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося відновити");
+    }
   };
 
   const fillLaneWithTeam = async (team: Team) => {
@@ -1842,6 +2035,8 @@ export default function TeamCompetitionPage({
             fillLaneWithTeam={fillLaneWithTeam}
             removeTeam={removeTeam}
             updateTeam={updateTeam}
+            removeAllTeams={() => removeAllTeamsByStatus("waiting")}
+            undoRemoveAllTeams={() => undoLastTeamRemoval("waiting")}
             showAthleteNames={showAthleteNames}
             onToggleShowAthleteNames={toggleShowAthleteNames}
             collapsed={teamsCollapsed}
@@ -1874,6 +2069,8 @@ export default function TeamCompetitionPage({
             teams={doneTeams}
             returnDoneTeamToLane={returnDoneTeamToLane}
             updateTeam={updateTeam}
+            removeAllDone={() => removeAllTeamsByStatus("done")}
+            undoRemoveAllDone={() => undoLastTeamRemoval("done")}
             showAthleteNames={showAthleteNames}
             collapsed={doneCollapsed}
             onToggleCollapse={() => setDoneCollapsed((prev) => !prev)}
@@ -1911,6 +2108,8 @@ export default function TeamCompetitionPage({
               fillLaneWithTeam={fillLaneWithTeam}
               removeTeam={removeTeam}
               updateTeam={updateTeam}
+              removeAllTeams={() => removeAllTeamsByStatus("waiting")}
+              undoRemoveAllTeams={() => undoLastTeamRemoval("waiting")}
               showAthleteNames={showAthleteNames}
               onToggleShowAthleteNames={toggleShowAthleteNames}
             />
@@ -1936,6 +2135,8 @@ export default function TeamCompetitionPage({
               teams={doneTeams}
               returnDoneTeamToLane={returnDoneTeamToLane}
               updateTeam={updateTeam}
+              removeAllDone={() => removeAllTeamsByStatus("done")}
+              undoRemoveAllDone={() => undoLastTeamRemoval("done")}
               showAthleteNames={showAthleteNames}
             />
           </TabsContent>
