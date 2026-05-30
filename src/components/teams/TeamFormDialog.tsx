@@ -209,6 +209,7 @@ export function TeamFormDialog({
   );
   const [submitting, setSubmitting] = useState(false);
   const athleteInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const pendingAthleteFocusIndex = useRef<number | null>(null);
 
   const libraryButtonLabel =
     saveToLibraryLabel ??
@@ -249,10 +250,18 @@ export function TeamFormDialog({
     return () => unsub();
   }, [open, enableLibrarySave]);
 
+  useEffect(() => {
+    const index = pendingAthleteFocusIndex.current;
+    if (index === null) return;
+    pendingAthleteFocusIndex.current = null;
+    athleteInputRefs.current[index]?.focus();
+  }, [athletes]);
+
   const reset = () => {
     setName("");
     setAthletes(createDraftAthletes(DEFAULT_TEAM_ATHLETE_FIELDS));
     athleteInputRefs.current = [];
+    pendingAthleteFocusIndex.current = null;
   };
 
   const buildTeamPayload = (): TeamFormValues | null => {
@@ -331,6 +340,13 @@ export function TeamFormDialog({
 
   const removeAthlete = (id: string) => {
     setAthletes((prev) => prev.filter((athlete) => athlete.id !== id));
+  };
+
+  const addAthlete = () => {
+    setAthletes((prev) => {
+      pendingAthleteFocusIndex.current = prev.length;
+      return [...prev, createDraftAthlete()];
+    });
   };
 
   const handleTeamNameTab = (
@@ -427,13 +443,7 @@ export function TeamFormDialog({
                   </div>
                 </SortableContext>
               </DndContext>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setAthletes((prev) => [...prev, createDraftAthlete()])
-                }
-              >
+              <Button type="button" variant="outline" onClick={addAthlete}>
                 <Plus className="w-4 h-4 mr-1" />
                 Додати атлета
               </Button>
