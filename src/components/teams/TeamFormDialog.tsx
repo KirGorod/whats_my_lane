@@ -148,9 +148,9 @@ function SortableAthleteRow({
         variant="outline"
         className="shrink-0 cursor-grab active:cursor-grabbing"
         title="Змінити порядок"
-        tabIndex={-1}
         {...attributes}
         {...listeners}
+        tabIndex={-1}
       >
         <GripVertical className="w-4 h-4" />
       </Button>
@@ -333,6 +333,16 @@ export function TeamFormDialog({
     setAthletes((prev) => prev.filter((athlete) => athlete.id !== id));
   };
 
+  const handleTeamNameTab = (
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (event.key !== "Tab" || event.shiftKey) return;
+    const firstAthleteInput = athleteInputRefs.current[0];
+    if (!firstAthleteInput) return;
+    event.preventDefault();
+    firstAthleteInput.focus();
+  };
+
   const handleAthleteTab = (
     index: number,
     event: React.KeyboardEvent<HTMLInputElement>
@@ -376,6 +386,7 @@ export function TeamFormDialog({
                 id="team-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onKeyDown={handleTeamNameTab}
                 required
               />
             </div>
