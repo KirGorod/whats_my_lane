@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -18,15 +18,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { Plus } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { COMPETITOR_CATEGORIES } from "../../../types/competitor";
 
-const DEFAULT_CATEGORY = "h1";
+type Competitor = {
+  id: string;
+  name: string;
+  category: string;
+};
 
-const AddCompetitorDialog = ({ addCompetitor }) => {
+export default function EditCompetitorDialog({
+  competitor,
+  updateCompetitor,
+  disabled = false,
+}: {
+  competitor: Competitor;
+  updateCompetitor: (
+    c: Competitor,
+    patch: Pick<Competitor, "name" | "category">
+  ) => Promise<void> | void;
+  disabled?: boolean;
+}) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState(DEFAULT_CATEGORY);
+  const [name, setName] = useState(competitor.name);
+  const [category, setCategory] = useState(competitor.category);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(competitor.name);
+    setCategory(competitor.category);
+  }, [open, competitor.name, competitor.category]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -34,42 +55,43 @@ const AddCompetitorDialog = ({ addCompetitor }) => {
         <Button
           variant="ghost"
           size="icon"
-          className="text-blue-600 hover:text-blue-800"
-          title="Add competitor"
+          className="text-gray-500 hover:text-gray-900 disabled:opacity-50 disabled:pointer-events-none"
+          title="Редагувати учасника"
+          disabled={disabled}
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          <Plus className="w-5 h-5" />
+          <Pencil className="w-4 h-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            addCompetitor({ name, category });
-            setName("");
-            setCategory(DEFAULT_CATEGORY);
+            const trimmed = name.trim();
+            if (!trimmed || !category) return;
+            await updateCompetitor(competitor, { name: trimmed, category });
             setOpen(false);
           }}
         >
           <DialogHeader>
-            <DialogTitle>Add competitor</DialogTitle>
+            <DialogTitle>Редагувати учасника</DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-4">
             <div className="grid gap-3">
               <Input
-                id="competition-name"
                 type="text"
-                placeholder="Competitor Name"
+                placeholder="Ім'я учасника"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="mt-4"
               />
             </div>
             <div className="grid gap-3">
-              <Label htmlFor="lanes">Category</Label>
+              <Label htmlFor="edit-category">Категорія</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                <SelectTrigger id="edit-category">
+                  <SelectValue placeholder="Оберіть категорію" />
                 </SelectTrigger>
                 <SelectContent>
                   {COMPETITOR_CATEGORIES.map((cat) => (
@@ -85,15 +107,15 @@ const AddCompetitorDialog = ({ addCompetitor }) => {
           <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button variant="outline" type="button">
-                Cancel
+                Скасувати
               </Button>
             </DialogClose>
-            <Button type="submit">Add</Button>
+            <Button type="submit" disabled={!name.trim() || !category}>
+              Зберегти
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
-};
-
-export default AddCompetitorDialog;
+}

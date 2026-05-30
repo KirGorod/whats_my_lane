@@ -46,6 +46,7 @@ const SortableCompetitorRow = ({
   isPending,
   onFill,
   onRemove,
+  onUpdate,
 }: {
   competitor: Competitor;
   position: number;
@@ -53,6 +54,10 @@ const SortableCompetitorRow = ({
   isPending: boolean; // new
   onFill: (c: Competitor) => Promise<void> | void;
   onRemove: (c: Competitor) => Promise<void> | void;
+  onUpdate: (
+    c: Competitor,
+    patch: Pick<Competitor, "name" | "category">
+  ) => Promise<void> | void;
 }) => {
   const {
     attributes,
@@ -78,6 +83,7 @@ const SortableCompetitorRow = ({
         position={position}
         onFill={onFill}
         onRemove={onRemove}
+        onUpdate={onUpdate}
         isPending={isPending}
       />
     </div>
@@ -90,6 +96,7 @@ const CompetitorsList = ({
   removeCompetitor,
   addCompetitor,
   addCompetitorsBulk,
+  updateCompetitor,
   removeAllCompetitors,
   undoRemoveAllCompetitors,
   fillLaneWithCompetitor,
@@ -100,6 +107,10 @@ const CompetitorsList = ({
   addCompetitor: (c: Omit<Competitor, "id">) => Promise<void> | void;
   addCompetitorsBulk?: (
     c: Array<Omit<Competitor, "id">>
+  ) => Promise<void> | void;
+  updateCompetitor: (
+    c: Competitor,
+    patch: Pick<Competitor, "name" | "category">
   ) => Promise<void> | void;
   removeAllCompetitors?: () => Promise<void> | void;
   undoRemoveAllCompetitors?: () => Promise<void> | void;
@@ -205,6 +216,10 @@ const CompetitorsList = ({
     withPending(c.id, () => fillLaneWithCompetitor(c))();
   const handleRemove = (c: Competitor) =>
     withPending(c.id, () => removeCompetitor(c))();
+  const handleUpdate = (
+    c: Competitor,
+    patch: Pick<Competitor, "name" | "category">
+  ) => withPending(c.id, () => updateCompetitor(c, patch))();
 
   const handleRemoveAll = async () => {
     if (!removeAllCompetitors) return;
@@ -328,6 +343,7 @@ const CompetitorsList = ({
                   isPending={pendingIds.has(competitor.id)}
                   onFill={handleFill}
                   onRemove={handleRemove}
+                  onUpdate={handleUpdate}
                 />
               ))}
             </SortableContext>

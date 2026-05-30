@@ -27,6 +27,7 @@ import {
   serverTimestamp,
   writeBatch,
   runTransaction,
+  updateDoc,
 } from "firebase/firestore";
 import {
   Tabs,
@@ -292,6 +293,27 @@ export default function CompetitionPage() {
     } catch (err) {
       console.error(err);
       toast.error("Error adding athletes");
+    }
+  };
+
+  const updateCompetitor = async (
+    competitor: Competitor,
+    patch: Pick<Competitor, "name" | "category">
+  ) => {
+    if (!exerciseId) return;
+    const name = patch.name.trim();
+    if (!name) {
+      toast.error("Ім'я не може бути порожнім");
+      return;
+    }
+    try {
+      await updateDoc(
+        doc(db, "exercises", exerciseId, "competitors", competitor.id),
+        { name, category: patch.category }
+      );
+      toast.success("Учасника оновлено");
+    } catch {
+      toast.error("Не вдалося оновити учасника");
     }
   };
 
@@ -1390,6 +1412,7 @@ export default function CompetitionPage() {
             removeCompetitor={removeCompetitor}
             addCompetitor={addCompetitor}
             addCompetitorsBulk={addCompetitorsBulk}
+            updateCompetitor={updateCompetitor}
             removeAllCompetitors={() => removeAllByStatus("waiting")}
             undoRemoveAllCompetitors={() => undoLastRemoval("waiting")}
             fillLaneWithCompetitor={fillLaneWithCompetitor}
@@ -1464,6 +1487,7 @@ export default function CompetitionPage() {
               removeCompetitor={removeCompetitor}
               addCompetitor={addCompetitor}
               addCompetitorsBulk={addCompetitorsBulk}
+              updateCompetitor={updateCompetitor}
               removeAllCompetitors={() => removeAllByStatus("waiting")}
               undoRemoveAllCompetitors={() => undoLastRemoval("waiting")}
               fillLaneWithCompetitor={fillLaneWithCompetitor}

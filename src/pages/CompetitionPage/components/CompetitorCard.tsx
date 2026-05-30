@@ -4,6 +4,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { getBadgeColor } from "../../../utils/getBadgeColor";
 import { Badge } from "../../../components/ui/badge";
 import { useTranslation } from "react-i18next";
+import EditCompetitorDialog from "./EditCompetitorDialog";
 
 type Competitor = {
   id: string;
@@ -17,12 +18,17 @@ export default function CompetitorCard({
   position,
   onFill,
   onRemove,
+  onUpdate,
   isPending = false,
 }: {
   competitor: Competitor;
   position?: number;
   onFill: (c: Competitor) => void | Promise<void>;
   onRemove: (c: Competitor) => void | Promise<void>;
+  onUpdate: (
+    c: Competitor,
+    patch: Pick<Competitor, "name" | "category">
+  ) => Promise<void> | void;
   isPending?: boolean;
 }) {
   const { t } = useTranslation();
@@ -59,16 +65,23 @@ export default function CompetitorCard({
       {isAdmin && (
         <div className="max-h-20">
           <div className="flex justify-between gap-1 pt-2">
-            <Button
-              onClick={() => onRemove(competitor)}
-              variant="ghost"
-              size="icon"
-              className="text-red-500 hover:text-red-700 disabled:opacity-50 disabled:pointer-events-none"
-              aria-label={`${t("Remove")} ${competitor.name}`}
-              disabled={isPending}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            <div className="flex gap-1">
+              <Button
+                onClick={() => onRemove(competitor)}
+                variant="ghost"
+                size="icon"
+                className="text-red-500 hover:text-red-700 disabled:opacity-50 disabled:pointer-events-none"
+                aria-label={`${t("Remove")} ${competitor.name}`}
+                disabled={isPending}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+              <EditCompetitorDialog
+                competitor={competitor}
+                updateCompetitor={onUpdate}
+                disabled={isPending}
+              />
+            </div>
             <Button
               onClick={() => onFill(competitor)}
               variant="ghost"
