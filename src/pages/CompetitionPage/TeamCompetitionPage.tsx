@@ -3,6 +3,8 @@ import {
   useEffect,
   useMemo,
   useState,
+  type HTMLAttributes,
+  type CSSProperties,
 } from "react";
 import {
   addDoc,
@@ -25,12 +27,14 @@ import {
   ArrowBigRight,
   ArrowBigRightDash,
   ArrowLeft,
+  AlertCircle,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
   Copy,
   Download,
   Flag,
+  GripVertical,
   Info,
   Pencil,
   Lock,
@@ -38,11 +42,30 @@ import {
   Loader2,
   Plus,
   RotateCcw,
+  Search,
   Trash2,
   Unlock,
   Users,
   Zap,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { db } from "../../firebase";
@@ -631,6 +654,8 @@ function TeamCard({
   showAthleteNames = false,
   doneIndex,
   doneTotal,
+  dragHandleProps,
+  isDragDisabled = false,
 }: {
   team: Team;
   position?: number;
@@ -642,6 +667,8 @@ function TeamCard({
   showAthleteNames?: boolean;
   doneIndex?: number;
   doneTotal?: number;
+  dragHandleProps?: HTMLAttributes<HTMLButtonElement>;
+  isDragDisabled?: boolean;
 }) {
   const { isAdmin } = useAuth();
   const showAthleteList = isAdmin && showAthleteNames;
@@ -660,6 +687,19 @@ function TeamCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 pr-10">
           <div className="flex items-start gap-2">
+            {dragHandleProps && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="mt-0.5 shrink-0 h-7 w-7 cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-700 disabled:cursor-default disabled:opacity-50"
+                disabled={isDragDisabled}
+                title="Перетягнути для зміни порядку"
+                {...dragHandleProps}
+              >
+                <GripVertical className="w-4 h-4" />
+              </Button>
+            )}
             {number ? (
               <span className="mt-0.5 px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-xs shrink-0">
                 #{number}
@@ -738,7 +778,61 @@ function TeamCard({
   );
 }
 
+const SortableTeamRow = ({
+  team,
+  position,
+  disabled,
+  showDragHandle,
+  onFill,
+  onRemove,
+  onEdit,
+  onClone,
+  showAthleteNames,
+}: {
+  team: Team;
+  position: number;
+  disabled: boolean;
+  showDragHandle: boolean;
+  onFill: (team: Team) => Promise<void> | void;
+  onRemove: (team: Team) => Promise<void> | void;
+  onEdit: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  onClone: (team: Team) => Promise<void> | void;
+  showAthleteNames: boolean;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: team.id, disabled });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <TeamCard
+        team={team}
+        position={position}
+        onFill={onFill}
+        onRemove={onRemove}
+        onEdit={onEdit}
+        onClone={onClone}
+        showAthleteNames={showAthleteNames}
+        dragHandleProps={showDragHandle ? listeners : undefined}
+        isDragDisabled={disabled}
+      />
+    </div>
+  );
+};
+
 function TeamList({
+  exerciseId,
   teams,
   competitionTeamNameKeys,
   addTeam,
@@ -754,6 +848,7 @@ function TeamList({
   collapsed = false,
   onToggleCollapse,
 }: {
+  exerciseId: string;
   teams: Team[];
   competitionTeamNameKeys: Set<string>;
   addTeam: (team: Omit<Team, "id">) => Promise<void> | void;
@@ -769,8 +864,84 @@ function TeamList({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
+  const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+  const [items, setItems] = useState<string[]>([]);
+
+  useEffect(() => {
+    setItems(teams.map((team) => team.id));
+  }, [teams]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const draggingDisabled = !!searchTerm.trim().length || !isAdmin;
+
+  const filteredTeams = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const list = term
+      ? teams.filter(
+          (team) =>
+            team.name.toLowerCase().includes(term) ||
+            team.city?.toLowerCase().includes(term) ||
+            team.athletes?.some((athlete) =>
+              athlete.toLowerCase().includes(term)
+            )
+        )
+      : teams;
+
+    const orderIndex = new Map(items.map((id, idx) => [id, idx]));
+    return [...list].sort(
+      (a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0)
+    );
+  }, [teams, searchTerm, items]);
+
+  const filteredIds = useMemo(
+    () => filteredTeams.map((team) => team.id),
+    [filteredTeams]
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    if (draggingDisabled) return;
+
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldFilteredIndex = filteredIds.indexOf(String(active.id));
+    const newFilteredIndex = filteredIds.indexOf(String(over.id));
+    if (oldFilteredIndex === -1 || newFilteredIndex === -1) return;
+
+    const newFilteredOrder = arrayMove(
+      filteredIds,
+      oldFilteredIndex,
+      newFilteredIndex
+    );
+
+    const filteredSet = new Set(filteredIds);
+    const replacementQueue = [...newFilteredOrder];
+    const merged: string[] = items.map((id) =>
+      filteredSet.has(id) ? (replacementQueue.shift() as string) : id
+    );
+
+    setItems(merged);
+
+    try {
+      const batch = writeBatch(db);
+      merged.forEach((teamId, idx) => {
+        const ref = doc(db, "exercises", exerciseId, "teams", teamId);
+        batch.update(ref, { orderRank: idx + 1 });
+      });
+      await batch.commit();
+      toast.success("Порядок оновлено");
+    } catch (e) {
+      console.error(e);
+      setItems(teams.map((team) => team.id));
+      toast.error("Не вдалося зберегти порядок");
+    }
+  };
 
   const handleRemoveAll = async () => {
     if (!removeAllTeams) return;
@@ -794,16 +965,6 @@ function TeamList({
     if (!ok) return;
     await undoRemoveAllTeams();
   };
-  const filteredTeams = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return teams;
-    return teams.filter(
-      (team) =>
-        team.name.toLowerCase().includes(term) ||
-        team.city?.toLowerCase().includes(term) ||
-        team.athletes?.some((athlete) => athlete.toLowerCase().includes(term))
-    );
-  }, [teams, searchTerm]);
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow">
@@ -884,11 +1045,21 @@ function TeamList({
       {!collapsed && (
         <>
           <div className="p-4 border-t border-gray-200 space-y-2">
-            <Input
-              placeholder="Пошук команди або атлета"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Пошук команди або атлета"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            {isAdmin && searchTerm.trim() && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {t("DragDropDisabled")}
+              </div>
+            )}
             {isAdmin && onToggleShowAthleteNames && (
               <Button
                 type="button"
@@ -914,18 +1085,32 @@ function TeamList({
                 Немає команд у черзі
               </div>
             ) : (
-              filteredTeams.map((team, index) => (
-                <TeamCard
-                  key={team.id}
-                  team={team}
-                  position={index + 1}
-                  onFill={fillLaneWithTeam}
-                  onRemove={removeTeam}
-                  onEdit={updateTeam}
-                  onClone={cloneTeam}
-                  showAthleteNames={showAthleteNames}
-                />
-              ))
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+                modifiers={[restrictToVerticalAxis]}
+              >
+                <SortableContext
+                  items={filteredIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {filteredTeams.map((team, index) => (
+                    <SortableTeamRow
+                      key={team.id}
+                      team={team}
+                      position={index + 1}
+                      disabled={draggingDisabled}
+                      showDragHandle={isAdmin}
+                      onFill={fillLaneWithTeam}
+                      onRemove={removeTeam}
+                      onEdit={updateTeam}
+                      onClone={cloneTeam}
+                      showAthleteNames={showAthleteNames}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             )}
           </div>
         </>
@@ -2157,6 +2342,7 @@ export default function TeamCompetitionPage({
           ].join(" ")}
         >
           <TeamList
+            exerciseId={exerciseId}
             teams={teams}
             competitionTeamNameKeys={competitionTeamNameKeys}
             addTeam={addTeam}
@@ -2232,6 +2418,7 @@ export default function TeamCompetitionPage({
           </div>
           <TabsContent value="teams" className="flex-1 m-0">
             <TeamList
+              exerciseId={exerciseId}
               teams={teams}
               competitionTeamNameKeys={competitionTeamNameKeys}
               addTeam={addTeam}
