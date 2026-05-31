@@ -28,6 +28,7 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   Flag,
   Info,
@@ -48,6 +49,7 @@ import { db } from "../../firebase";
 import {
   collectCompetitionTeamNameKeys,
   isTeamNameTaken,
+  makeUniqueTeamName,
   normalizeTeamName,
 } from "../../lib/teamNames";
 import { useAuth } from "../../context/AuthContext";
@@ -625,6 +627,7 @@ function TeamCard({
   onRemove,
   onReturn,
   onEdit,
+  onClone,
   showAthleteNames = false,
   doneIndex,
   doneTotal,
@@ -635,6 +638,7 @@ function TeamCard({
   onRemove?: (team: Team) => Promise<void> | void;
   onReturn?: (team: Team) => Promise<void> | void;
   onEdit?: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  onClone?: (team: Team) => Promise<void> | void;
   showAthleteNames?: boolean;
   doneIndex?: number;
   doneTotal?: number;
@@ -684,16 +688,30 @@ function TeamCard({
 
       {isAdmin && (
         <div className="flex justify-between gap-1 pt-2">
-          {onRemove && (
-            <Button
-              onClick={() => onRemove(team)}
-              variant="ghost"
-              size="icon"
-              className="text-red-500 hover:text-red-700"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          )}
+          <div className="flex gap-1">
+            {onRemove && (
+              <Button
+                onClick={() => onRemove(team)}
+                variant="ghost"
+                size="icon"
+                className="text-red-500 hover:text-red-700"
+                title="Видалити команду"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
+            {onClone && (
+              <Button
+                onClick={() => onClone(team)}
+                variant="ghost"
+                size="icon"
+                className="text-slate-600 hover:text-slate-800"
+                title="Клонувати команду"
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
           {onReturn && (
             <Button
               onClick={() => onReturn(team)}
@@ -728,6 +746,7 @@ function TeamList({
   fillLaneWithTeam,
   removeTeam,
   updateTeam,
+  cloneTeam,
   removeAllTeams,
   undoRemoveAllTeams,
   showAthleteNames = false,
@@ -742,6 +761,7 @@ function TeamList({
   fillLaneWithTeam: (team: Team) => Promise<void> | void;
   removeTeam: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  cloneTeam: (team: Team) => Promise<void> | void;
   removeAllTeams?: () => Promise<void> | void;
   undoRemoveAllTeams?: () => Promise<void> | void;
   showAthleteNames?: boolean;
@@ -902,6 +922,7 @@ function TeamList({
                   onFill={fillLaneWithTeam}
                   onRemove={removeTeam}
                   onEdit={updateTeam}
+                  onClone={cloneTeam}
                   showAthleteNames={showAthleteNames}
                 />
               ))
@@ -1400,6 +1421,7 @@ function DoneTeamsList({
   teams,
   returnDoneTeamToLane,
   updateTeam,
+  deleteDoneTeam,
   removeAllDone,
   undoRemoveAllDone,
   showAthleteNames = false,
@@ -1409,6 +1431,7 @@ function DoneTeamsList({
   teams: Team[];
   returnDoneTeamToLane: (team: Team) => Promise<void> | void;
   updateTeam: (team: Team, patch: Omit<Team, "id">) => Promise<void> | void;
+  deleteDoneTeam?: (team: Team) => Promise<void> | void;
   removeAllDone?: () => Promise<void> | void;
   undoRemoveAllDone?: () => Promise<void> | void;
   showAthleteNames?: boolean;
@@ -1416,6 +1439,13 @@ function DoneTeamsList({
   onToggleCollapse?: () => void;
 }) {
   const { isAdmin } = useAuth();
+
+  const handleDeleteDoneTeam = async (team: Team) => {
+    if (!deleteDoneTeam) return;
+    const ok = window.confirm(`Видалити команду «${team.name}»?`);
+    if (!ok) return;
+    await deleteDoneTeam(team);
+  };
 
   const handleRemoveAllDone = async () => {
     if (!removeAllDone) return;
@@ -1518,6 +1548,7 @@ function DoneTeamsList({
                 doneIndex={index}
                 doneTotal={teams.length}
                 onReturn={returnDoneTeamToLane}
+                onRemove={deleteDoneTeam ? handleDeleteDoneTeam : undefined}
                 onEdit={updateTeam}
                 showAthleteNames={showAthleteNames}
               />
@@ -1622,6 +1653,15 @@ export default function TeamCompetitionPage({
     toast.success("Команду додано");
   };
 
+  const cloneTeam = async (team: Team) => {
+    const name = makeUniqueTeamName(team.name, competitionTeamNameKeys);
+    await addTeam({
+      name,
+      ...(team.city ? { city: team.city } : {}),
+      athletes: [...(team.athletes ?? [])],
+    });
+  };
+
   const addTeamsBulk = async (newTeams: Array<Omit<Team, "id">>) => {
     if (!newTeams.length) return;
 
@@ -1718,6 +1758,31 @@ export default function TeamCompetitionPage({
       undone: false,
     } satisfies TeamActionHistory);
     await batch.commit();
+  };
+
+  const deleteDoneTeam = async (team: Team) => {
+    try {
+      await addDoc(collection(db, "exercises", exerciseId, "removalLogs"), {
+        status: "done",
+        teams: [
+          {
+            id: team.id,
+            name: team.name,
+            ...(team.city ? { city: team.city } : {}),
+            athletes: team.athletes ?? [],
+            status: team.status ?? "done",
+            ...(team.order !== undefined ? { order: team.order } : {}),
+            ...(team.orderRank !== undefined ? { orderRank: team.orderRank } : {}),
+          },
+        ],
+        createdAt: serverTimestamp(),
+      });
+      await deleteDoc(doc(db, "exercises", exerciseId, "teams", team.id));
+      toast.success("Команду видалено");
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося видалити команду");
+    }
   };
 
   const removeAllTeamsByStatus = async (status: "waiting" | "done") => {
@@ -2099,6 +2164,7 @@ export default function TeamCompetitionPage({
             fillLaneWithTeam={fillLaneWithTeam}
             removeTeam={removeTeam}
             updateTeam={updateTeam}
+            cloneTeam={cloneTeam}
             removeAllTeams={() => removeAllTeamsByStatus("waiting")}
             undoRemoveAllTeams={() => undoLastTeamRemoval("waiting")}
             showAthleteNames={showAthleteNames}
@@ -2133,6 +2199,7 @@ export default function TeamCompetitionPage({
             teams={doneTeams}
             returnDoneTeamToLane={returnDoneTeamToLane}
             updateTeam={updateTeam}
+            deleteDoneTeam={deleteDoneTeam}
             removeAllDone={() => removeAllTeamsByStatus("done")}
             undoRemoveAllDone={() => undoLastTeamRemoval("done")}
             showAthleteNames={showAthleteNames}
@@ -2172,6 +2239,7 @@ export default function TeamCompetitionPage({
               fillLaneWithTeam={fillLaneWithTeam}
               removeTeam={removeTeam}
               updateTeam={updateTeam}
+              cloneTeam={cloneTeam}
               removeAllTeams={() => removeAllTeamsByStatus("waiting")}
               undoRemoveAllTeams={() => undoLastTeamRemoval("waiting")}
               showAthleteNames={showAthleteNames}
@@ -2199,6 +2267,7 @@ export default function TeamCompetitionPage({
               teams={doneTeams}
               returnDoneTeamToLane={returnDoneTeamToLane}
               updateTeam={updateTeam}
+              deleteDoneTeam={deleteDoneTeam}
               removeAllDone={() => removeAllTeamsByStatus("done")}
               undoRemoveAllDone={() => undoLastTeamRemoval("done")}
               showAthleteNames={showAthleteNames}

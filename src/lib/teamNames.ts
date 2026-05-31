@@ -32,3 +32,19 @@ export function isTeamNameTaken(
   if (!key) return false;
   return existingKeys.has(normalizeTeamName(key));
 }
+
+export function makeUniqueTeamName(
+  baseName: string,
+  existingKeys: Set<string>
+): string {
+  const trimmed = baseName.trim();
+  let candidate = `${trimmed} (копія)`;
+  let counter = 2;
+
+  while (isTeamNameTaken(candidate, existingKeys)) {
+    candidate = `${trimmed} (копія ${counter})`;
+    counter += 1;
+  }
+
+  return candidate;
+}
