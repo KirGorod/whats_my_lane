@@ -1,5 +1,6 @@
-import { Dumbbell } from "lucide-react";
+import { Dumbbell, Trash2 } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
 import { useEffect, useState } from "react";
 import AddExercise from "./components/AddExercise";
 import { type Exercise } from "../../types/exercise";
@@ -68,6 +69,33 @@ const ExercisesPage = () => {
     setEditingExercise(exercise);
   };
 
+  const handleRemoveAll = async () => {
+    if (exercises.length === 0) return;
+
+    const confirm = window.prompt(
+      "Введіть 'remove' або 'видалити' щоб підтвердити видалення ВСІХ вправ"
+    );
+    if (!confirm) return;
+
+    const ok =
+      confirm.trim().toLowerCase() === "remove" ||
+      confirm.trim().toLowerCase() === "видалити";
+    if (!ok) {
+      toast.error("Потрібно ввести 'remove' або 'видалити'");
+      return;
+    }
+
+    try {
+      await Promise.all(
+        exercises.map((exercise) => deleteDoc(doc(db, "exercises", exercise.id)))
+      );
+      toast.success(t("RemoveAllExercisesSuccess"));
+    } catch (err) {
+      console.error(err);
+      toast.error(t("RemoveAllExercisesError"));
+    }
+  };
+
   return (
     <div className="min-h-screen p-4 sm:p-6">
       {/* Centered container */}
@@ -107,8 +135,21 @@ const ExercisesPage = () => {
             </CardContent>
           </Card>
         ) : (
-          // LIST (centered via max-w and mx-auto above)
-          <ul className="space-y-3">
+          <>
+            {isAdmin && (
+              <div className="flex justify-end mb-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={handleRemoveAll}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  {t("RemoveAllExercises")}
+                </Button>
+              </div>
+            )}
+            <ul className="space-y-3">
             {exercises.map((exercise) => (
               <li key={exercise.id}>
                 <ExerciseCard
@@ -118,7 +159,8 @@ const ExercisesPage = () => {
                 />
               </li>
             ))}
-          </ul>
+            </ul>
+          </>
         )}
       </div>
       <ScrollToTopButton />
