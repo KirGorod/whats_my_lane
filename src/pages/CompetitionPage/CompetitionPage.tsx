@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Competitor } from "../../types/competitor";
 import type {
@@ -48,6 +48,16 @@ import type {
 } from "../../types/history";
 import { getGeneralLaneType } from "../../config/laneTypesByExercise";
 import type { AutofillMode } from "../../hooks/useAutofillMode";
+import {
+  computeAutofillQueueOrder,
+  groupLanesByReadyType,
+  makeWaitingByCategory,
+  queueOrderDiffersFromOrderRank,
+  QUEUE_ORDER_AUTOFILL_MODE,
+  readyUpLaneType,
+  isCategoryAllowedForReady,
+} from "../../utils/autofillOrder";
+import { groupLanesByType } from "../../utils/laneUtils";
 import { useTranslation } from "react-i18next";
 import ScrollToTopButton from "../../components/main/ScrollToTopButton";
 import TeamCompetitionPage from "./TeamCompetitionPage";
@@ -61,38 +71,6 @@ const normalizeExerciseType = (raw: any): ExerciseType => {
   if (v === "flexibility") return "rowing";
   return "bench";
 };
-
-/** Lane type that controls READY UP (next round takes precedence) */
-const readyUpLaneType = (lane: LaneModel): LaneType | null =>
-  lane.nextLaneType ?? lane.laneType ?? null;
-
-/** Check if category can go to READY UP (uses nextLaneType if set) */
-const isCategoryAllowedForReady = (
-  exerciseType: ExerciseType,
-  lane: LaneModel,
-  category: string
-): boolean => {
-  const lt = readyUpLaneType(lane);
-  return !!lt && isCategoryAllowedForLane(exerciseType, lt, category);
-};
-
-/** Group lanes by READY UP controlling lane type (nextLaneType first) */
-function groupLanesByReadyType(
-  lanes: LaneModel[],
-  predicate: (l: LaneModel) => boolean
-): Map<LaneType, LaneModel[]> {
-  const m = new Map<LaneType, LaneModel[]>();
-  for (const l of lanes) {
-    if (!predicate(l)) continue;
-    const key = readyUpLaneType(l);
-    if (!key) continue;
-    const arr = m.get(key) ?? [];
-    arr.push(l);
-    m.set(key, arr);
-  }
-  for (const [, arr] of m) arr.sort((a, b) => a.id - b.id);
-  return m;
-}
 
 export default function CompetitionPage() {
   const { t } = useTranslation();
@@ -119,6 +97,7 @@ export default function CompetitionPage() {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
   const [lanes, setLanes] = useState<LaneModel[]>([]);
+  const orderSaveInFlightRef = useRef(false);
 
   // Load exercise meta (name, status, type)
   useEffect(() => {
@@ -218,52 +197,38 @@ export default function CompetitionPage() {
     };
   }, [exerciseId, metaLoaded, competitionKind]);
 
-  function groupLanesByType(
-    lanes: LaneModel[],
-    predicate: (l: LaneModel) => boolean
-  ): Map<LaneType, LaneModel[]> {
-    const m = new Map<LaneType, LaneModel[]>();
-    for (const l of lanes) {
-      if (!l.laneType) continue;
-      if (!predicate(l)) continue;
-      const arr = m.get(l.laneType) ?? [];
-      arr.push(l);
-      m.set(l.laneType, arr);
-    }
-    for (const [, arr] of m) arr.sort((a, b) => a.id - b.id);
-    return m;
-  }
+  // Sync orderRank to autofill preview order
+  useEffect(() => {
+    if (!exerciseId || !competitors.length) return;
 
-  function makeWaitingByCategory(waiting: Competitor[]) {
-    // Keep women (isFemale) as a fallback queue so they are used only when no other competitors remain for the category
-    const m = new Map<
-      string,
-      { primary: Competitor[]; femaleFallback: Competitor[] }
-    >();
+    const timer = window.setTimeout(async () => {
+      if (orderSaveInFlightRef.current) return;
 
-    for (const c of waiting) {
-      const bucket =
-        m.get(c.category) ?? { primary: [], femaleFallback: [] };
-      if (c.isFemale) bucket.femaleFallback.push(c);
-      else bucket.primary.push(c);
-      m.set(c.category, bucket);
-    }
+      const queue = computeAutofillQueueOrder(
+        competitors,
+        lanes,
+        exerciseType,
+        QUEUE_ORDER_AUTOFILL_MODE
+      );
+      if (!queueOrderDiffersFromOrderRank(queue, competitors)) return;
 
-    return {
-      pop(cat: string): Competitor | undefined {
-        const bucket = m.get(cat);
-        if (!bucket) return undefined;
+      const batch = writeBatch(db);
+      queue.forEach(({ competitor }, idx) => {
+        batch.update(
+          doc(db, "exercises", exerciseId, "competitors", competitor.id),
+          { orderRank: idx + 1 }
+        );
+      });
 
-        const c = bucket.primary.shift() ?? bucket.femaleFallback.shift();
-        if (!bucket.primary.length && !bucket.femaleFallback.length) {
-          m.delete(cat);
-        } else {
-          m.set(cat, bucket);
-        }
-        return c;
-      },
-    };
-  }
+      try {
+        await batch.commit();
+      } catch (err) {
+        console.error("Failed to sync competitor order", err);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [exerciseId, competitors, lanes, exerciseType]);
 
   // CRUD helpers
   const addCompetitor = async (competitor: Omit<Competitor, "id">) => {
@@ -1175,10 +1140,6 @@ export default function CompetitionPage() {
   const returnDoneCompetitorToLane = async (competitor: Competitor) => {
     if (!exerciseId) return;
 
-    // Helper: which lane type governs READY UP (next round takes precedence)
-    const readyUpLaneType = (lane: LaneModel): LaneType | null =>
-      lane.nextLaneType ?? lane.laneType ?? null;
-
     // Compatibility checks
     const compatibleForNow = (lane: LaneModel) =>
       lane.laneType &&
@@ -1569,6 +1530,11 @@ export default function CompetitionPage() {
           <CompetitorsList
             exerciseId={exerciseId}
             competitors={competitors}
+            lanes={lanes}
+            exerciseType={exerciseType}
+            onOrderRankSavingChange={(saving) => {
+              orderSaveInFlightRef.current = saving;
+            }}
             removeCompetitor={removeCompetitor}
             addCompetitor={addCompetitor}
             addCompetitorsBulk={addCompetitorsBulk}
@@ -1644,6 +1610,11 @@ export default function CompetitionPage() {
             <CompetitorsList
               exerciseId={exerciseId}
               competitors={competitors}
+              lanes={lanes}
+              exerciseType={exerciseType}
+              onOrderRankSavingChange={(saving) => {
+                orderSaveInFlightRef.current = saving;
+              }}
               removeCompetitor={removeCompetitor}
               addCompetitor={addCompetitor}
               addCompetitorsBulk={addCompetitorsBulk}

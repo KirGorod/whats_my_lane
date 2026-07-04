@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import AddCompetitorDialog from "./AddCompetitorDialog";
 import UploadCompetitorsCSV from "./UploadCompetitorsCSV";
@@ -10,7 +10,6 @@ import CompetitorCard from "./CompetitorCard";
 import { toast } from "sonner";
 import { db } from "../../../firebase";
 import { doc, writeBatch } from "firebase/firestore";
-// dnd-kit imports ...
 import {
   DndContext,
   closestCenter,
@@ -30,6 +29,14 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
+import type { ExerciseType } from "../../../types/exercise";
+import type { LaneModel } from "../../../types/lane";
+import {
+  computeAutofillQueueOrder,
+  QUEUE_ORDER_AUTOFILL_MODE,
+  type QueuedCompetitor,
+} from "../../../utils/autofillOrder";
+import { getRoundGroupClass } from "../../../utils/laneTypeStyles";
 
 type Competitor = {
   id: string;
@@ -40,18 +47,16 @@ type Competitor = {
 };
 
 const SortableCompetitorRow = ({
-  competitor,
-  position,
+  item,
   disabled,
   isPending,
   onFill,
   onRemove,
   onUpdate,
 }: {
-  competitor: Competitor;
-  position: number;
-  disabled: boolean; // DnD disabled flag
-  isPending: boolean; // new
+  item: QueuedCompetitor;
+  disabled: boolean;
+  isPending: boolean;
   onFill: (c: Competitor) => Promise<void> | void;
   onRemove: (c: Competitor) => Promise<void> | void;
   onUpdate: (
@@ -66,7 +71,10 @@ const SortableCompetitorRow = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: competitor.id, disabled: disabled || isPending });
+  } = useSortable({
+    id: item.competitor.id,
+    disabled: disabled || isPending,
+  });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -79,8 +87,8 @@ const SortableCompetitorRow = ({
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <CompetitorCard
-        competitor={competitor}
-        position={position}
+        competitor={item.competitor}
+        targetLaneId={item.targetLaneId}
         onFill={onFill}
         onRemove={onRemove}
         onUpdate={onUpdate}
@@ -90,9 +98,22 @@ const SortableCompetitorRow = ({
   );
 };
 
+function groupByRound(items: QueuedCompetitor[]) {
+  const groups = new Map<number, QueuedCompetitor[]>();
+  for (const item of items) {
+    const arr = groups.get(item.roundNumber) ?? [];
+    arr.push(item);
+    groups.set(item.roundNumber, arr);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a - b);
+}
+
 const CompetitorsList = ({
   exerciseId,
   competitors,
+  lanes,
+  exerciseType,
+  onOrderRankSavingChange,
   removeCompetitor,
   addCompetitor,
   addCompetitorsBulk,
@@ -102,7 +123,10 @@ const CompetitorsList = ({
   fillLaneWithCompetitor,
 }: {
   exerciseId: string;
-  competitors: Competitor[]; // ordered by orderRank asc from parent
+  competitors: Competitor[];
+  lanes: LaneModel[];
+  exerciseType: ExerciseType;
+  onOrderRankSavingChange?: (saving: boolean) => void;
   removeCompetitor: (c: Competitor) => Promise<void> | void;
   addCompetitor: (c: Omit<Competitor, "id">) => Promise<void> | void;
   addCompetitorsBulk?: (
@@ -119,36 +143,45 @@ const CompetitorsList = ({
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
-
-  // 🔹 Track competitors currently performing an async action
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
-  // Keep a local master order of IDs; resync when incoming list changes.
-  const [items, setItems] = useState<string[]>([]);
-  useEffect(() => {
-    setItems(competitors.map((c) => c.id));
-  }, [competitors]);
+  const queueOrder = useMemo(
+    () =>
+      computeAutofillQueueOrder(
+        competitors,
+        lanes,
+        exerciseType,
+        QUEUE_ORDER_AUTOFILL_MODE
+      ),
+    [competitors, lanes, exerciseType]
+  );
+
+  const filteredQueue = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return queueOrder;
+    return queueOrder.filter((q) =>
+      q.competitor.name.toLowerCase().includes(term)
+    );
+  }, [queueOrder, searchTerm]);
+
+  const filteredGroups = useMemo(
+    () => groupByRound(filteredQueue),
+    [filteredQueue]
+  );
+
+  const filteredIds = useMemo(
+    () => filteredQueue.map((q) => q.competitor.id),
+    [filteredQueue]
+  );
+
+  const allIds = useMemo(
+    () => queueOrder.map((q) => q.competitor.id),
+    [queueOrder]
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const filteredCompetitors = useMemo(() => {
-    const term = searchTerm.toLowerCase();
-    const list = term
-      ? competitors.filter((c) => c.name.toLowerCase().includes(term))
-      : competitors;
-
-    const orderIndex = new Map(items.map((id, idx) => [id, idx]));
-    return [...list].sort(
-      (a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0)
-    );
-  }, [competitors, searchTerm, items]);
-
-  const filteredIds = useMemo(
-    () => filteredCompetitors.map((c) => c.id),
-    [filteredCompetitors]
   );
 
   const draggingDisabled = !!searchTerm.trim().length || !isAdmin;
@@ -171,12 +204,11 @@ const CompetitorsList = ({
 
     const filteredSet = new Set(filteredIds);
     const replacementQueue = [...newFilteredOrder];
-    const merged: string[] = items.map((id) =>
+    const merged: string[] = allIds.map((id) =>
       filteredSet.has(id) ? (replacementQueue.shift() as string) : id
     );
 
-    setItems(merged);
-
+    onOrderRankSavingChange?.(true);
     try {
       const batch = writeBatch(db);
       merged.forEach((competitorId, idx) => {
@@ -194,10 +226,11 @@ const CompetitorsList = ({
     } catch (e) {
       console.error(e);
       toast.error("Failed to save new order");
+    } finally {
+      onOrderRankSavingChange?.(false);
     }
   };
 
-  // 🔹 Wrap async actions to set/clear pending per competitor
   const withPending =
     (id: string, fn: () => Promise<void> | void) => async () => {
       setPendingIds((prev) => new Set(prev).add(id));
@@ -246,7 +279,6 @@ const CompetitorsList = ({
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow">
-      {/* Header */}
       <div className="p-4 border-b border-gray-200 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -298,7 +330,6 @@ const CompetitorsList = ({
         )}
       </div>
 
-      {/* Search */}
       <div className="p-4 border-t border-gray-200">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -317,9 +348,8 @@ const CompetitorsList = ({
         )}
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {filteredCompetitors.length === 0 ? (
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {filteredQueue.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             {searchTerm ? t("NoCompetitorsMatch") : t("NoCompetitorsAvailable")}
           </div>
@@ -334,18 +364,51 @@ const CompetitorsList = ({
               items={filteredIds}
               strategy={verticalListSortingStrategy}
             >
-              {filteredCompetitors.map((competitor, index) => (
-                <SortableCompetitorRow
-                  key={competitor.id}
-                  competitor={competitor}
-                  position={index + 1}
-                  disabled={draggingDisabled}
-                  isPending={pendingIds.has(competitor.id)}
-                  onFill={handleFill}
-                  onRemove={handleRemove}
-                  onUpdate={handleUpdate}
-                />
-              ))}
+              {filteredGroups.map(([roundNumber, items]) => {
+                const isUnassigned = items.every(
+                  (item) => item.targetLaneId == null
+                );
+                return (
+                  <Fragment key={roundNumber}>
+                    <div
+                      className={[
+                        "rounded-lg border-l-4 p-3 mb-4",
+                        getRoundGroupClass(roundNumber, isUnassigned),
+                      ].join(" ")}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold shrink-0">
+                            {roundNumber}
+                          </span>
+                          <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+                            {t("ExitRound", { defaultValue: "Round" })}
+                          </span>
+                        </div>
+                        <span className="text-xs font-medium text-gray-500 tabular-nums">
+                          {t("ExitRoundAthleteCount", {
+                            defaultValue: "{{count}} athletes",
+                            count: items.length,
+                          })}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {items.map((item) => (
+                          <SortableCompetitorRow
+                            key={item.competitor.id}
+                            item={item}
+                            disabled={draggingDisabled}
+                            isPending={pendingIds.has(item.competitor.id)}
+                            onFill={handleFill}
+                            onRemove={handleRemove}
+                            onUpdate={handleUpdate}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </Fragment>
+                );
+              })}
             </SortableContext>
           </DndContext>
         )}

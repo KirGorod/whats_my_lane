@@ -20,6 +20,7 @@ import {
 import { Badge } from "../../../components/ui/badge";
 import type { ExerciseType } from "../../../types/exercise";
 import type { LaneModel, LaneType } from "../../../types/lane";
+import { getLaneTypeBadgeClass } from "../../../utils/laneTypeStyles";
 import { getAllowedCategoriesForLane } from "../../../utils/laneRules";
 import { useTranslation } from "react-i18next";
 import { Bot } from "lucide-react";
@@ -28,19 +29,7 @@ function badgeClass(
   laneType: LaneType | null,
   categoryChangedByAutofill?: boolean
 ) {
-  if (categoryChangedByAutofill) {
-    return "bg-amber-100 text-amber-800 border border-amber-400";
-  }
-  switch (laneType) {
-    case "paralympic":
-      return "bg-purple-100 text-purple-700";
-    case "kettle":
-      return "bg-orange-100 text-orange-700";
-    case "defaultBench":
-      return "bg-blue-100 text-blue-700";
-    default:
-      return "bg-gray-100 text-gray-700";
-  }
+  return getLaneTypeBadgeClass(laneType, categoryChangedByAutofill);
 }
 
 function laneTypeSelectClass(categoryChangedByAutofill?: boolean) {

@@ -91,5 +91,7 @@
   "AllowCategoryChange": "Дозволити зміну категорії автозаповненням",
   "CategoryChange": "Зміна категорії",
   "ShowCategoryChangeAlert": "Показати попередження про зміну категорії",
-  "ClearCategoryChangeAlert": "Прибрати попередження про зміну категорії"
+  "ClearCategoryChangeAlert": "Прибрати попередження про зміну категорії",
+  "ExitRound": "Вихід",
+  "ExitRoundAthleteCount": "{{count}} учасників"
 }

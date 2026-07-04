@@ -15,14 +15,14 @@ type Competitor = {
 
 export default function CompetitorCard({
   competitor,
-  position,
+  targetLaneId,
   onFill,
   onRemove,
   onUpdate,
   isPending = false,
 }: {
   competitor: Competitor;
-  position?: number;
+  targetLaneId?: number | null;
   onFill: (c: Competitor) => void | Promise<void>;
   onRemove: (c: Competitor) => void | Promise<void>;
   onUpdate: (
@@ -33,26 +33,29 @@ export default function CompetitorCard({
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
-  const displayNumber =
-    typeof position === "number" ? position : competitor.orderRank;
 
   return (
     <div
       className={[
-        "bg-slate-100 rounded-lg p-3 space-y-3 group transition-all duration-300",
+        "bg-white rounded-lg p-3 space-y-3 group transition-all duration-300 border border-slate-200",
         isPending ? "opacity-60 saturate-0" : "",
       ].join(" ")}
       aria-busy={isPending}
       aria-disabled={isPending}
+      title={
+        targetLaneId != null
+          ? `${t("Lane")} ${targetLaneId}`
+          : undefined
+      }
     >
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2 min-w-0">
-          {displayNumber ? (
+      <div className="flex justify-between items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {targetLaneId != null ? (
             <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-xs shrink-0">
-              #{displayNumber}
+              #{targetLaneId}
             </span>
           ) : null}
-          <div className="font-medium text-gray-900 whitespace-normal">
+          <div className="font-medium text-gray-900 whitespace-normal min-w-0">
             {competitor.name}
           </div>
         </div>

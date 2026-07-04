@@ -92,5 +92,7 @@
   "AllowCategoryChange": "Allow autofill category change",
   "CategoryChange": "Category change",
   "ShowCategoryChangeAlert": "Show category change alert",
-  "ClearCategoryChangeAlert": "Clear category change alert"
+  "ClearCategoryChangeAlert": "Clear category change alert",
+  "ExitRound": "Round",
+  "ExitRoundAthleteCount": "{{count}} athletes"
 }
