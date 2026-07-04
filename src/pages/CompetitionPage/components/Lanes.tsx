@@ -20,10 +20,8 @@ import { Flag, Zap, RotateCcw, ArrowBigRightDash } from "lucide-react";
 import Lane from "./Lane";
 import type { LaneModel, LaneType } from "../../../types/lane";
 import type { ExerciseType } from "../../../types/exercise";
-import {
-  LANE_TYPES_BY_EXERCISE,
-  shouldAutoRestrictCategoryChange,
-} from "../../../config/laneTypesByExercise";
+import { LANE_TYPES_BY_EXERCISE } from "../../../config/laneTypesByExercise";
+import { initialLaneFields } from "../../../utils/laneTemplates";
 import { LANE_TYPES } from "../../../types/lane";
 import type { ActionHistory } from "../../../types/history";
 import { toast } from "sonner";
@@ -212,23 +210,13 @@ export default function Lanes({
         newId = existingIds.length + 1;
       }
 
-      const laneTypeToAssign =
-        laneTypeOptions.length > 0
-          ? (laneTypeOptions[lanes.length % laneTypeOptions.length] as LaneType)
-          : null;
-
       await addDoc(collection(db, "exercises", exerciseId, "lanes"), {
         id: newId,
-        laneType: laneTypeToAssign,
-        category: laneTypeToAssign, // mirror for back-compat
+        ...initialLaneFields(exerciseType),
         nextLaneType: null,
         competitor: null,
         readyUp: null,
         locked: false,
-        restrictCategoryChange: shouldAutoRestrictCategoryChange(
-          exerciseType,
-          laneTypeToAssign
-        ),
         createdAt: serverTimestamp(),
       });
     } catch (err) {

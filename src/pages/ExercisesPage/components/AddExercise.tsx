@@ -18,6 +18,7 @@ import {
   type ExerciseStatus,
   type ExerciseType,
 } from "../../../types/exercise";
+import { initialLaneFields } from "../../../utils/laneTemplates";
 import { db } from "../../../firebase";
 import {
   addDoc,
@@ -147,14 +148,14 @@ const AddExercise = ({ editingExercise, setEditingExercise }) => {
 
         const batch = writeBatch(db);
         const lanesCount = formData.numberOfLanes;
+        const exerciseType = payload.type as ExerciseType;
         for (let i = 1; i <= lanesCount; i++) {
           const laneRef = doc(
             collection(db, "exercises", exerciseRef.id, "lanes")
           );
           batch.set(laneRef, {
             id: i,
-            category: null,
-            laneType: null,
+            ...initialLaneFields(exerciseType),
             nextLaneType: null,
             competitor: null,
             readyUp: null,
