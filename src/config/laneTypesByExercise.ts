@@ -19,3 +19,11 @@ export const GENERAL_LANE_TYPE_BY_EXERCISE: Record<ExerciseType, LaneType> = {
 export function getGeneralLaneType(exerciseType: ExerciseType): LaneType {
   return GENERAL_LANE_TYPE_BY_EXERCISE[exerciseType];
 }
+
+/** SkiErg lanes should block autofill from switching them to general rowing. */
+export function shouldAutoRestrictCategoryChange(
+  exerciseType: ExerciseType,
+  laneType: LaneType | null | undefined
+): boolean {
+  return exerciseType === "rowing" && laneType === "skiErg";
+}

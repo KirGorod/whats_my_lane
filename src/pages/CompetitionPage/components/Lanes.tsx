@@ -20,7 +20,10 @@ import { Flag, Zap, RotateCcw, ArrowBigRightDash } from "lucide-react";
 import Lane from "./Lane";
 import type { LaneModel, LaneType } from "../../../types/lane";
 import type { ExerciseType } from "../../../types/exercise";
-import { LANE_TYPES_BY_EXERCISE } from "../../../config/laneTypesByExercise";
+import {
+  LANE_TYPES_BY_EXERCISE,
+  shouldAutoRestrictCategoryChange,
+} from "../../../config/laneTypesByExercise";
 import { LANE_TYPES } from "../../../types/lane";
 import type { ActionHistory } from "../../../types/history";
 import { toast } from "sonner";
@@ -222,7 +225,10 @@ export default function Lanes({
         competitor: null,
         readyUp: null,
         locked: false,
-        restrictCategoryChange: false,
+        restrictCategoryChange: shouldAutoRestrictCategoryChange(
+          exerciseType,
+          laneTypeToAssign
+        ),
         createdAt: serverTimestamp(),
       });
     } catch (err) {

@@ -21,6 +21,7 @@ import { Badge } from "../../../components/ui/badge";
 import type { ExerciseType } from "../../../types/exercise";
 import type { LaneModel, LaneType } from "../../../types/lane";
 import { getLaneTypeBadgeClass } from "../../../utils/laneTypeStyles";
+import { shouldAutoRestrictCategoryChange } from "../../../config/laneTypesByExercise";
 import { getAllowedCategoriesForLane } from "../../../utils/laneRules";
 import { useTranslation } from "react-i18next";
 import { Bot } from "lucide-react";
@@ -98,6 +99,10 @@ export default function Lane({
         laneType: newLaneType,
         category: newLaneType,
         categoryChangedByAutofill: false,
+        restrictCategoryChange: shouldAutoRestrictCategoryChange(
+          exerciseType,
+          newLaneType
+        ),
       });
     } catch (err) {
       console.error("Error updating lane type", err);
