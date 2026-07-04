@@ -84,7 +84,7 @@
   "ErrorUpdatingLane": "Error updating lane",
   "AutofillMode": "Autofill mode",
   "AutofillModeLabel": "mode:",
-  "AutofillModeStrict": "Default",
+  "AutofillModeStrict": "Manual",
   "AutofillModeFallback": "Full-Auto",
   "AutofillNoGeneralAthletes": "Could not fill lane(s) {{lanes}}: no general athletes available",
   "LaneCategoryChangedByAutofill": "Lane category changed by autofill",

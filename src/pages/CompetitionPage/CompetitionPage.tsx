@@ -489,7 +489,7 @@ export default function CompetitionPage() {
   };
 
   /** Auto-fill with history (category-first per lane type) */
-  const autoFillLanes = async (mode: AutofillMode = "strict") => {
+  const autoFillLanes = async (mode: AutofillMode = "fallbackGeneral") => {
     if (!exerciseId) return;
 
     const waitingAll = competitors.filter((c) => c.status === "waiting");

@@ -83,7 +83,7 @@
   "ErrorUpdatingLane": "Помилка оновлення доріжки",
   "AutofillMode": "Режим автозаповнення",
   "AutofillModeLabel": "mode:",
-  "AutofillModeStrict": "Default",
+  "AutofillModeStrict": "Manual",
   "AutofillModeFallback": "Full-Auto",
   "AutofillNoGeneralAthletes": "Не вдалося заповнити доріжку(и) {{lanes}}: немає учасників загальної категорії",
   "LaneCategoryChangedByAutofill": "Категорію доріжки змінено автозаповненням",

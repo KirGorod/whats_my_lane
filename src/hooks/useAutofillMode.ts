@@ -5,9 +5,9 @@ export type AutofillMode = "strict" | "fallbackGeneral";
 const STORAGE_KEY = "whats_my_lane_autofill_mode";
 
 const readStored = (): AutofillMode => {
-  if (typeof window === "undefined") return "strict";
+  if (typeof window === "undefined") return "fallbackGeneral";
   const v = window.localStorage.getItem(STORAGE_KEY);
-  return v === "fallbackGeneral" ? "fallbackGeneral" : "strict";
+  return v === "strict" ? "strict" : "fallbackGeneral";
 };
 
 export function useAutofillMode() {
