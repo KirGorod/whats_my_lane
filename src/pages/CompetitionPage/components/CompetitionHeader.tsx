@@ -6,7 +6,8 @@ import { db } from "../../../firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import type { ExerciseStatus, ExerciseType } from "../../../types/exercise";
 import { statusOptions } from "../../../types/exercise";
-import { CheckCircle2, PlayCircle, CalendarClock } from "lucide-react";
+import { Link } from "react-router-dom";
+import { CheckCircle2, PlayCircle, CalendarClock, Monitor } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { statusBadgeClass } from "../../../utils/statusStyles";
 import { useTranslation } from "react-i18next";
@@ -56,7 +57,7 @@ export default memo(function CompetitionHeader({
 
   return (
     <div className="mb-4 flex flex-col gap-3">
-      <div className="flex items-center justify-center gap-3">
+      <div className="flex flex-wrap items-center justify-center gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="font-heading truncate text-xl font-semibold sm:text-2xl">
             {name ?? t("Competition")}
@@ -66,6 +67,19 @@ export default memo(function CompetitionHeader({
             {statusIcon(status)} <span className="ml-1">{t(status)}</span>
           </Badge>
         </div>
+
+        <Button asChild variant="outline" size="sm">
+          <Link
+            to={`/competitions/${exerciseId}/display`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Monitor className="h-4 w-4" />
+            <span className="ml-1.5">
+              {t("TVDisplay", { defaultValue: "TV Display" })}
+            </span>
+          </Link>
+        </Button>
       </div>
 
       {isAdmin && (
