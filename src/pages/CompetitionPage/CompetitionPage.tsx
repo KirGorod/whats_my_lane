@@ -61,6 +61,7 @@ import { groupLanesByType } from "../../utils/laneUtils";
 import { useTranslation } from "react-i18next";
 import ScrollToTopButton from "../../components/main/ScrollToTopButton";
 import TeamCompetitionPage from "./TeamCompetitionPage";
+import HostNotificationModal from "./components/HostNotificationModal";
 
 const normalizeExerciseType = (raw: any): ExerciseType => {
   const v = String(raw ?? "").toLowerCase();
@@ -1501,14 +1502,17 @@ export default function CompetitionPage() {
 
   if (competitionKind === "team") {
     return (
-      <TeamCompetitionPage
-        exerciseId={exerciseId}
-        name={exerciseName}
-        status={exerciseStatus}
-        type={exerciseType}
-        teamNamesOnly={teamNamesOnly}
-        lanesPerRow={lanesPerRow}
-      />
+      <>
+        <HostNotificationModal exerciseId={exerciseId} />
+        <TeamCompetitionPage
+          exerciseId={exerciseId}
+          name={exerciseName}
+          status={exerciseStatus}
+          type={exerciseType}
+          teamNamesOnly={teamNamesOnly}
+          lanesPerRow={lanesPerRow}
+        />
+      </>
     );
   }
 
@@ -1516,6 +1520,7 @@ export default function CompetitionPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      <HostNotificationModal exerciseId={exerciseId} />
       {/* Header with name and status */}
       <CompetitionHeader
         exerciseId={exerciseId}

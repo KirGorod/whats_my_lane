@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
@@ -9,9 +9,11 @@ import {
   CardTitle,
 } from "../../components/ui/card";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 export default function LoginPage() {
-  const { login, isAdmin } = useAuth();
+  const { login, isLoggedIn } = useAuth();
+  const { t } = useTranslation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,39 +22,44 @@ export default function LoginPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (login(username, password)) {
-      navigate("/"); // ✅ redirect to home
+      navigate("/");
     } else {
-      setError("Invalid credentials");
+      setError(t("login.invalidCredentials"));
     }
   };
 
-  // Optional: if already logged in, redirect immediately
-  if (isAdmin) {
-    navigate("/");
+  useEffect(() => {
+    if (isLoggedIn) {
+      navigate("/");
+    }
+  }, [isLoggedIn, navigate]);
+
+  if (isLoggedIn) {
+    return null;
   }
 
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-100">
-      <Card className="w-[350px]">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
+      <Card className="w-full max-w-[350px]">
         <CardHeader>
-          <CardTitle>Admin Login</CardTitle>
+          <CardTitle>{t("login.title")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              placeholder="Username"
+              placeholder={t("login.username")}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
             <Input
               type="password"
-              placeholder="Password"
+              placeholder={t("login.password")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
             {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button type="submit" className="w-full">
-              Login
+            <Button type="submit" className="w-full min-h-11">
+              {t("login.submit")}
             </Button>
           </form>
         </CardContent>

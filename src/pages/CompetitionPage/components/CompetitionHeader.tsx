@@ -10,6 +10,7 @@ import { CheckCircle2, PlayCircle, CalendarClock } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { statusBadgeClass } from "../../../utils/statusStyles";
 import { useTranslation } from "react-i18next";
+import SendHostNotificationDialog from "./SendHostNotificationDialog";
 
 function statusIcon(s: ExerciseStatus) {
   switch (s) {
@@ -68,7 +69,7 @@ export default memo(function CompetitionHeader({
 
       {/* Status selector */}
       {isAdmin && (
-        <div className="flex gap-2 justify-center">
+        <div className="flex flex-wrap gap-2 justify-center items-center">
           {statusOptions.map(({ value, label }) => (
             <Button
               key={value}
@@ -83,6 +84,7 @@ export default memo(function CompetitionHeader({
               <span className="ml-1">{t(label)}</span>
             </Button>
           ))}
+          <SendHostNotificationDialog exerciseId={exerciseId} />
         </div>
       )}
     </div>
