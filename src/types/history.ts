@@ -9,17 +9,20 @@ export type ActionKind =
   | "fillLane"
   | "returnDone";
 
+export interface LanePatchFields {
+  competitor: LaneModel["competitor"] | null;
+  readyUp: LaneModel["readyUp"] | null;
+  laneType?: LaneModel["laneType"];
+  category?: LaneModel["category"];
+  nextLaneType?: LaneModel["nextLaneType"];
+  categoryChangedByAutofill?: boolean;
+}
+
 export interface LanePatch {
   laneDocId: string;
   laneId: number;
-  before: {
-    competitor: LaneModel["competitor"] | null;
-    readyUp: LaneModel["readyUp"] | null;
-  };
-  after: {
-    competitor: LaneModel["competitor"] | null;
-    readyUp: LaneModel["readyUp"] | null;
-  };
+  before: LanePatchFields;
+  after: LanePatchFields;
 }
 
 export interface CompetitorPatch {

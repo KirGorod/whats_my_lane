@@ -81,5 +81,16 @@
   "NoLanesToUpdate": "No lanes to update",
   "NextRoundStartedUndoAvailable": "Next round started (undo available)",
   "ErrorStartingNextRound": "Error starting next round",
-  "ErrorUpdatingLane": "Error updating lane"
+  "ErrorUpdatingLane": "Error updating lane",
+  "AutofillMode": "Autofill mode",
+  "AutofillModeLabel": "mode:",
+  "AutofillModeStrict": "Default",
+  "AutofillModeFallback": "Full-Auto",
+  "AutofillNoGeneralAthletes": "Could not fill lane(s) {{lanes}}: no general athletes available",
+  "LaneCategoryChangedByAutofill": "Lane category changed by autofill",
+  "RestrictCategoryChange": "Restrict autofill category change",
+  "AllowCategoryChange": "Allow autofill category change",
+  "CategoryChange": "Category change",
+  "ShowCategoryChangeAlert": "Show category change alert",
+  "ClearCategoryChangeAlert": "Clear category change alert"
 }

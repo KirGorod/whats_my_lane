@@ -80,5 +80,16 @@
   "NoLanesToUpdate": "Немає доріжок для оновлення",
   "NextRoundStartedUndoAvailable": "Розпочато наступний раунд (можна скасувати)",
   "ErrorStartingNextRound": "Помилка запуску наступного раунду",
-  "ErrorUpdatingLane": "Помилка оновлення доріжки"
+  "ErrorUpdatingLane": "Помилка оновлення доріжки",
+  "AutofillMode": "Режим автозаповнення",
+  "AutofillModeLabel": "mode:",
+  "AutofillModeStrict": "Default",
+  "AutofillModeFallback": "Full-Auto",
+  "AutofillNoGeneralAthletes": "Не вдалося заповнити доріжку(и) {{lanes}}: немає учасників загальної категорії",
+  "LaneCategoryChangedByAutofill": "Категорію доріжки змінено автозаповненням",
+  "RestrictCategoryChange": "Заборонити зміну категорії автозаповненням",
+  "AllowCategoryChange": "Дозволити зміну категорії автозаповненням",
+  "CategoryChange": "Зміна категорії",
+  "ShowCategoryChangeAlert": "Показати попередження про зміну категорії",
+  "ClearCategoryChangeAlert": "Прибрати попередження про зміну категорії"
 }

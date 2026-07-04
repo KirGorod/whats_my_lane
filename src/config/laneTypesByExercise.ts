@@ -8,3 +8,14 @@ export const LANE_TYPES_BY_EXERCISE: Record<ExerciseType, LaneType[]> = {
   airbike: ["chair", "twoLegs", "oneLeg", "oneHand", "defaultAirbike"],
   rowing: ["skiErg", "handle", "chair", "defaultRowing"],
 };
+
+export const GENERAL_LANE_TYPE_BY_EXERCISE: Record<ExerciseType, LaneType> = {
+  bench: "defaultBench",
+  kettle: "jerk",
+  airbike: "defaultAirbike",
+  rowing: "defaultRowing",
+};
+
+export function getGeneralLaneType(exerciseType: ExerciseType): LaneType {
+  return GENERAL_LANE_TYPE_BY_EXERCISE[exerciseType];
+}

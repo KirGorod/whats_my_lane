@@ -44,7 +44,10 @@ import type {
   ActionHistory,
   CompetitorPatch,
   LanePatch,
+  LanePatchFields,
 } from "../../types/history";
+import { getGeneralLaneType } from "../../config/laneTypesByExercise";
+import type { AutofillMode } from "../../hooks/useAutofillMode";
 import { useTranslation } from "react-i18next";
 import ScrollToTopButton from "../../components/main/ScrollToTopButton";
 import TeamCompetitionPage from "./TeamCompetitionPage";
@@ -201,6 +204,8 @@ export default function CompetitionPage() {
           competitor: data.competitor ?? null,
           readyUp: data.readyUp ?? null,
           locked: !!data.locked,
+          categoryChangedByAutofill: !!data.categoryChangedByAutofill,
+          restrictCategoryChange: !!data.restrictCategoryChange,
         } as LaneModel;
       });
       setLanes(lanesData);
@@ -518,7 +523,7 @@ export default function CompetitionPage() {
   };
 
   /** Auto-fill with history (category-first per lane type) */
-  const autoFillLanes = async () => {
+  const autoFillLanes = async (mode: AutofillMode = "strict") => {
     if (!exerciseId) return;
 
     const waitingAll = competitors.filter((c) => c.status === "waiting");
@@ -529,6 +534,25 @@ export default function CompetitionPage() {
     const lanePatches: LanePatch[] = [];
     const compPatches: CompetitorPatch[] = [];
     const waitingByCat = makeWaitingByCategory(waitingAll);
+    const unfilledNow: LaneModel[] = [];
+    const unfilledReady: LaneModel[] = [];
+
+    const lanePatchFields = (lane: LaneModel): LanePatchFields => ({
+      competitor: lane.competitor ?? null,
+      readyUp: lane.readyUp ?? null,
+      laneType: lane.laneType ?? null,
+      category: lane.category ?? null,
+      nextLaneType: lane.nextLaneType ?? null,
+      categoryChangedByAutofill: !!lane.categoryChangedByAutofill,
+    });
+
+    const tryPopForCategories = (categories: readonly string[]) => {
+      for (const cat of categories) {
+        const c = waitingByCat.pop(cat);
+        if (c) return c;
+      }
+      return undefined;
+    };
 
     // ---- 1) NOW (empty lanes) ----
     const freeByType = groupLanesByType(
@@ -546,17 +570,13 @@ export default function CompetitionPage() {
           if (!c) break;
           const lane = queue.shift()!;
 
-          // record patch
           lanePatches.push({
             laneDocId: lane.laneDocId!,
             laneId: lane.id,
-            before: {
-              competitor: lane.competitor ?? null,
-              readyUp: lane.readyUp ?? null,
-            },
+            before: lanePatchFields(lane),
             after: {
+              ...lanePatchFields(lane),
               competitor: { id: c.id, name: c.name, category: c.category },
-              readyUp: lane.readyUp ?? null,
             },
           });
           compPatches.push({
@@ -565,7 +585,6 @@ export default function CompetitionPage() {
             afterStatus: "lane",
           });
 
-          // writes
           batch.update(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
@@ -578,10 +597,10 @@ export default function CompetitionPage() {
         }
         if (!queue.length) break;
       }
+      unfilledNow.push(...queue);
     }
 
     // ---- 2) READYUP (lanes with NOW but no READYUP) ----
-    // Use nextLaneType if present to decide which categories should queue.
     const needReadyByType = groupLanesByReadyType(
       lanes,
       (l) => !!l.competitor && !l.readyUp && !l.locked
@@ -600,12 +619,9 @@ export default function CompetitionPage() {
           lanePatches.push({
             laneDocId: lane.laneDocId!,
             laneId: lane.id,
-            before: {
-              competitor: lane.competitor ?? null,
-              readyUp: lane.readyUp ?? null,
-            },
+            before: lanePatchFields(lane),
             after: {
-              competitor: lane.competitor ?? null,
+              ...lanePatchFields(lane),
               readyUp: { id: c.id, name: c.name, category: c.category },
             },
           });
@@ -627,12 +643,133 @@ export default function CompetitionPage() {
         }
         if (!queue.length) break;
       }
+      unfilledReady.push(...queue);
+    }
+
+    // ---- 3) Fallback to general lane type ----
+    const stillUnfilledLaneIds: number[] = [];
+    if (mode === "fallbackGeneral") {
+      const generalType = getGeneralLaneType(exerciseType);
+      const generalPriority = getAllowedCategoriesForLane(
+        exerciseType,
+        generalType
+      );
+
+      for (const lane of unfilledNow) {
+        const typeWouldChange = lane.laneType !== generalType;
+        if (lane.restrictCategoryChange && typeWouldChange) {
+          stillUnfilledLaneIds.push(lane.id);
+          continue;
+        }
+
+        const c = tryPopForCategories(generalPriority);
+        if (!c) {
+          stillUnfilledLaneIds.push(lane.id);
+          continue;
+        }
+
+        const typeChanged = lane.laneType !== generalType;
+        const before = lanePatchFields(lane);
+        const after: LanePatchFields = {
+          ...before,
+          competitor: { id: c.id, name: c.name, category: c.category },
+          laneType: typeChanged ? generalType : before.laneType,
+          category: typeChanged ? generalType : before.category,
+          nextLaneType: typeChanged ? generalType : before.nextLaneType,
+          categoryChangedByAutofill: typeChanged
+            ? true
+            : before.categoryChangedByAutofill,
+        };
+
+        lanePatches.push({
+          laneDocId: lane.laneDocId!,
+          laneId: lane.id,
+          before,
+          after,
+        });
+        compPatches.push({
+          competitorId: c.id,
+          beforeStatus: "waiting",
+          afterStatus: "lane",
+        });
+
+        const update: Record<string, unknown> = {
+          competitor: { id: c.id, name: c.name, category: c.category },
+        };
+        if (typeChanged) {
+          update.laneType = generalType;
+          update.category = generalType;
+          update.nextLaneType = generalType;
+          update.categoryChangedByAutofill = true;
+        }
+        batch.update(
+          doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
+          update
+        );
+        batch.update(doc(db, "exercises", exerciseId, "competitors", c.id), {
+          status: "lane",
+        });
+      }
+
+      for (const lane of unfilledReady) {
+        const effectiveType = readyUpLaneType(lane);
+        const typeWouldChange = effectiveType !== generalType;
+        if (lane.restrictCategoryChange && typeWouldChange) {
+          stillUnfilledLaneIds.push(lane.id);
+          continue;
+        }
+
+        const c = tryPopForCategories(generalPriority);
+        if (!c) {
+          stillUnfilledLaneIds.push(lane.id);
+          continue;
+        }
+
+        const typeChanged = effectiveType !== generalType;
+        const before = lanePatchFields(lane);
+        const after: LanePatchFields = {
+          ...before,
+          readyUp: { id: c.id, name: c.name, category: c.category },
+          categoryChangedByAutofill: typeChanged
+            ? true
+            : before.categoryChangedByAutofill,
+        };
+
+        const update: Record<string, unknown> = {
+          readyUp: { id: c.id, name: c.name, category: c.category },
+        };
+
+        if (typeChanged) {
+          after.nextLaneType = generalType;
+          update.nextLaneType = generalType;
+          update.categoryChangedByAutofill = true;
+        }
+
+        lanePatches.push({
+          laneDocId: lane.laneDocId!,
+          laneId: lane.id,
+          before,
+          after,
+        });
+        compPatches.push({
+          competitorId: c.id,
+          beforeStatus: "waiting",
+          afterStatus: "ready",
+        });
+
+        batch.update(
+          doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
+          update
+        );
+        batch.update(doc(db, "exercises", exerciseId, "competitors", c.id), {
+          status: "ready",
+        });
+      }
     }
 
     const total = lanePatches.length;
     if (!total) return toast.error("No lanes could be filled");
 
-    // write history in the same batch (atomic)
     const actionRef = doc(collection(db, "exercises", exerciseId, "actions"));
     batch.set(actionRef, {
       action: "autofill",
@@ -646,6 +783,16 @@ export default function CompetitionPage() {
     try {
       await batch.commit();
       toast.success(`Auto-filled: ${total} updates saved (undo available)`);
+      if (stillUnfilledLaneIds.length) {
+        const lanesList = [...stillUnfilledLaneIds].sort((a, b) => a - b).join(", ");
+        toast.warning(
+          t("AutofillNoGeneralAthletes", {
+            defaultValue:
+              "Could not fill lane(s) {{lanes}}: no general athletes available",
+            lanes: lanesList,
+          })
+        );
+      }
     } catch (err) {
       console.error("Auto-fill failed", err);
       toast.error("Error filling lanes");
@@ -671,6 +818,7 @@ export default function CompetitionPage() {
         const before = {
           competitor: data.competitor ?? null,
           readyUp: data.readyUp ?? null,
+          categoryChangedByAutofill: !!data.categoryChangedByAutofill,
         };
 
         const lanePatches: LanePatch[] = [];
@@ -716,6 +864,7 @@ export default function CompetitionPage() {
         applyType = !!data.nextLaneType && data.nextLaneType !== data.laneType;
         tx.update(lref, {
           ...after,
+          categoryChangedByAutofill: false,
           ...(applyType
             ? {
                 laneType: data.nextLaneType,
@@ -731,6 +880,7 @@ export default function CompetitionPage() {
           before,
           after: {
             ...after,
+            categoryChangedByAutofill: false,
             ...(applyType
               ? {
                   // reflect type change in the history AFTER snapshot
@@ -795,6 +945,7 @@ export default function CompetitionPage() {
       const before = {
         competitor: lane.competitor ?? null,
         readyUp: lane.readyUp ?? null,
+        categoryChangedByAutofill: !!lane.categoryChangedByAutofill,
       };
 
       const afterCore = {
@@ -833,6 +984,7 @@ export default function CompetitionPage() {
       const lref = doc(db, "exercises", exerciseId, "lanes", lane.laneDocId);
       batch.update(lref, {
         ...afterCore,
+        categoryChangedByAutofill: false,
         ...(applyType
           ? {
               laneType: lane.nextLaneType,
@@ -848,6 +1000,7 @@ export default function CompetitionPage() {
         before,
         after: {
           ...afterCore,
+          categoryChangedByAutofill: false,
           ...(applyType ? { laneType: lane.nextLaneType } : {}),
         } as any,
       });

@@ -36,10 +36,11 @@ import {
   AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog";
 import { useTranslation } from "react-i18next";
+import { useAutofillMode, type AutofillMode } from "../../../hooks/useAutofillMode";
 
 interface Props {
   lanes: LaneModel[];
-  autoFillLanes: () => void;
+  autoFillLanes: (mode: AutofillMode) => void | Promise<void>;
   clearLane: (laneId: number) => void;
   clearAllLanes: () => void;
   exerciseId: string;
@@ -72,6 +73,7 @@ export default function Lanes({
 }: Props) {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
+  const { autofillMode, setAutofillMode } = useAutofillMode();
   const [exerciseType, setExerciseType] = useState<ExerciseType>("bench");
   const [undoBusy, setUndoBusy] = useState(false);
 
@@ -147,10 +149,27 @@ export default function Lanes({
       const batch = writeBatch(db);
 
       for (const lp of action.lanes) {
-        batch.update(doc(db, "exercises", exerciseId, "lanes", lp.laneDocId), {
+        const restore: Record<string, unknown> = {
           competitor: lp.before.competitor ?? null,
           readyUp: lp.before.readyUp ?? null,
-        });
+        };
+        if (lp.before.laneType !== undefined) {
+          restore.laneType = lp.before.laneType ?? null;
+        }
+        if (lp.before.category !== undefined) {
+          restore.category = lp.before.category ?? null;
+        }
+        if (lp.before.nextLaneType !== undefined) {
+          restore.nextLaneType = lp.before.nextLaneType ?? null;
+        }
+        if (lp.before.categoryChangedByAutofill !== undefined) {
+          restore.categoryChangedByAutofill =
+            lp.before.categoryChangedByAutofill ?? false;
+        }
+        batch.update(
+          doc(db, "exercises", exerciseId, "lanes", lp.laneDocId),
+          restore
+        );
       }
 
       for (const cp of action.competitors) {
@@ -203,6 +222,7 @@ export default function Lanes({
         competitor: null,
         readyUp: null,
         locked: false,
+        restrictCategoryChange: false,
         createdAt: serverTimestamp(),
       });
     } catch (err) {
@@ -222,9 +242,38 @@ export default function Lanes({
         </div>
 
         {isAdmin && (
-          <div className="flex gap-2">
+          <>
+            <div className="mb-1.5">
+              <div className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50 p-0.5">
+                <span className="text-[11px] leading-none text-gray-500 px-1.5">
+                  {t("AutofillModeLabel")}
+                </span>
+                <Button
+                  size="sm"
+                  variant={autofillMode === "strict" ? "default" : "ghost"}
+                  className="h-6 px-1.5 py-0 text-[11px] font-medium"
+                  onClick={() => setAutofillMode("strict")}
+                >
+                  {t("AutofillModeStrict")}
+                </Button>
+                <span className="text-[10px] leading-none text-gray-300 px-0.5">
+                  /
+                </span>
+                <Button
+                  size="sm"
+                  variant={
+                    autofillMode === "fallbackGeneral" ? "default" : "ghost"
+                  }
+                  className="h-6 px-1.5 py-0 text-[11px] font-medium"
+                  onClick={() => setAutofillMode("fallbackGeneral")}
+                >
+                  {t("AutofillModeFallback")}
+                </Button>
+              </div>
+            </div>
+            <div className="flex gap-2">
             <Button
-              onClick={autoFillLanes}
+              onClick={() => autoFillLanes(autofillMode)}
               size="sm"
               variant="outline"
               className="flex-1"
@@ -292,6 +341,7 @@ export default function Lanes({
               </AlertDialogContent>
             </AlertDialog>
           </div>
+          </>
         )}
       </div>
 

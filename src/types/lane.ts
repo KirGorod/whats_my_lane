@@ -37,4 +37,6 @@ export interface LaneModel {
   competitor: { id: string; name: string; category: string } | null;
   readyUp: { id: string; name: string; category: string } | null;
   locked: boolean;
+  categoryChangedByAutofill?: boolean;
+  restrictCategoryChange?: boolean;
 }
