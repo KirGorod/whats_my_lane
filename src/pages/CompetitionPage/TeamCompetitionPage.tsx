@@ -1137,12 +1137,17 @@ function TeamBlock({
   const { isAdmin } = useAuth();
   const color =
     tone === "green"
-      ? "bg-green-200 border-green-400 text-green-900"
-      : "bg-yellow-100 border-yellow-400 text-yellow-900";
-  const titleColor = tone === "green" ? "text-green-800" : "text-yellow-800";
+      ? "border-lane-now/40 bg-lane-now/18"
+      : "border-lane-ready/40 bg-lane-ready/18";
+  const titleColor =
+    tone === "green" ? "text-lane-now" : "text-lane-ready";
+  const nameColor =
+    tone === "green"
+      ? "text-lane-now-foreground"
+      : "text-lane-ready-foreground";
 
   return (
-    <div className={`${color} relative border rounded-lg p-3 flex flex-col gap-2`}>
+    <div className={`${color} relative flex flex-col gap-2 rounded-lg border p-3`}>
       {isAdmin && team && onEdit && (
         <div className="absolute right-3 top-3">
           <EditTeamDialog
@@ -1167,7 +1172,7 @@ function TeamBlock({
       </div>
       {team ? (
         <div className="text-center">
-          <div className="text-2xl xl:text-4xl font-semibold break-words">
+          <div className={`break-words text-2xl font-bold xl:text-4xl ${nameColor}`}>
             {team.name}
           </div>
           {team.city ? (

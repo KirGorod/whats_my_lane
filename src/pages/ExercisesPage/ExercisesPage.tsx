@@ -18,6 +18,7 @@ import ExerciseCard from "./components/ExerciseCard";
 import { useAuth } from "../../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import ScrollToTopButton from "../../components/main/ScrollToTopButton";
+import PageShell from "../../components/main/PageShell";
 
 const ExercisesPage = () => {
   const { t } = useTranslation();
@@ -39,7 +40,6 @@ const ExercisesPage = () => {
         id: d.id,
         ...(d.data() as Omit<Exercise, "id">),
       }));
-      // stable sort if you kept client sort
       const sorted = data.sort((a, b) => {
         const byStatus =
           STATUS_ORDER[a.status as keyof typeof STATUS_ORDER] -
@@ -97,59 +97,48 @@ const ExercisesPage = () => {
   };
 
   return (
-    <div className="min-h-screen p-4 sm:p-6">
-      {/* Centered container */}
-      <div className="max-w-2xl mx-auto">
-        {isAdmin ? (
-          <div>
-            {/* Header */}
-            <h1 className="text-3xl font-bold text-center text-gray-900">
-              {t("exercises")}
-            </h1>
+    <PageShell title={t("exercises")}>
+      {isAdmin && (
+        <div className="mb-6 flex justify-center">
+          <AddExercise
+            editingExercise={editingExercise}
+            setEditingExercise={setEditingExercise}
+          />
+        </div>
+      )}
 
-            {/* Add button centered under header */}
-            <div className="mt-4 mb-6 flex justify-center">
-              <AddExercise
-                editingExercise={editingExercise}
-                setEditingExercise={setEditingExercise}
-              />
+      {exercises.length === 0 ? (
+        <Card className="w-full">
+          <CardContent className="py-12 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/18">
+              <Dumbbell className="h-8 w-8 text-primary" />
             </div>
-          </div>
-        ) : (
-          <div>
-            {/* Header */}
-            <h1 className="text-3xl font-bold text-center text-gray-900 mb-5">
-              {t("exercises")}
-            </h1>
-          </div>
-        )}
-
-        {/* Content */}
-        {exercises.length === 0 ? (
-          <Card className="w-full">
-            <CardContent className="text-center py-12">
-              <Dumbbell className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                No exercises yet
-              </h3>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {isAdmin && (
-              <div className="flex justify-end mb-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                  onClick={handleRemoveAll}
-                >
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  {t("RemoveAllExercises")}
-                </Button>
-              </div>
-            )}
-            <ul className="space-y-3">
+            <h3 className="font-heading mb-2 text-lg font-medium text-foreground">
+              No exercises yet
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {isAdmin
+                ? "Add your first exercise to get started."
+                : "Check back when exercises are scheduled."}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {isAdmin && (
+            <div className="mb-3 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/5 hover:text-destructive"
+                onClick={handleRemoveAll}
+              >
+                <Trash2 className="mr-1 h-4 w-4" />
+                {t("RemoveAllExercises")}
+              </Button>
+            </div>
+          )}
+          <ul className="space-y-3 text-left">
             {exercises.map((exercise) => (
               <li key={exercise.id}>
                 <ExerciseCard
@@ -159,12 +148,11 @@ const ExercisesPage = () => {
                 />
               </li>
             ))}
-            </ul>
-          </>
-        )}
-      </div>
+          </ul>
+        </>
+      )}
       <ScrollToTopButton />
-    </div>
+    </PageShell>
   );
 };
 

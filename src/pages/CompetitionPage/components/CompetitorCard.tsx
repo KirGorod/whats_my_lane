@@ -3,8 +3,13 @@ import { Button } from "../../../components/ui/button";
 import { useAuth } from "../../../context/AuthContext";
 import { getBadgeColor } from "../../../utils/getBadgeColor";
 import { Badge } from "../../../components/ui/badge";
+import {
+  Card,
+  CardContent,
+} from "../../../components/ui/card";
 import { useTranslation } from "react-i18next";
 import EditCompetitorDialog from "./EditCompetitorDialog";
+import { cn } from "@/lib/utils";
 
 type Competitor = {
   id: string;
@@ -35,69 +40,69 @@ export default function CompetitorCard({
   const { isAdmin } = useAuth();
 
   return (
-    <div
-      className={[
-        "bg-white rounded-lg p-3 space-y-3 group transition-all duration-300 border border-slate-200",
-        isPending ? "opacity-60 saturate-0" : "",
-      ].join(" ")}
+    <Card
+      className={cn(
+        "gap-0 py-0 shadow-sm transition-all duration-300",
+        isPending && "opacity-60 saturate-0"
+      )}
       aria-busy={isPending}
       aria-disabled={isPending}
       title={
-        targetLaneId != null
-          ? `${t("Lane")} ${targetLaneId}`
-          : undefined
+        targetLaneId != null ? `${t("Lane")} ${targetLaneId}` : undefined
       }
     >
-      <div className="flex justify-between items-center gap-2">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {targetLaneId != null ? (
-            <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-xs shrink-0">
-              #{targetLaneId}
-            </span>
-          ) : null}
-          <div className="font-medium text-gray-900 whitespace-normal min-w-0">
-            {competitor.name}
+      <CardContent className="space-y-3 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {targetLaneId != null ? (
+              <span className="shrink-0 rounded bg-primary/10 px-2 py-0.5 font-mono text-xs text-primary">
+                #{targetLaneId}
+              </span>
+            ) : null}
+            <div className="min-w-0 whitespace-normal font-medium text-foreground">
+              {competitor.name}
+            </div>
           </div>
+
+          <Badge className={getBadgeColor(competitor.category)}>
+            {t(competitor.category)}
+          </Badge>
         </div>
 
-        <Badge className={getBadgeColor(competitor.category)}>
-          {t(competitor.category)}
-        </Badge>
-      </div>
-
-      {isAdmin && (
-        <div className="max-h-20">
-          <div className="flex justify-between gap-1 pt-2">
-            <div className="flex gap-1">
+        {isAdmin && (
+          <div className="max-h-20">
+            <div className="flex justify-between gap-1 pt-2">
+              <div className="flex gap-1">
+                <Button
+                  onClick={() => onRemove(competitor)}
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
+                  aria-label={`${t("Remove")} ${competitor.name}`}
+                  disabled={isPending}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                <EditCompetitorDialog
+                  competitor={competitor}
+                  updateCompetitor={onUpdate}
+                  disabled={isPending}
+                />
+              </div>
               <Button
-                onClick={() => onRemove(competitor)}
+                onClick={() => onFill(competitor)}
                 variant="ghost"
                 size="icon"
-                className="text-red-500 hover:text-red-700 disabled:opacity-50 disabled:pointer-events-none"
-                aria-label={`${t("Remove")} ${competitor.name}`}
+                className="text-primary hover:text-primary/80 disabled:pointer-events-none disabled:opacity-50"
+                aria-label={`${t("SendToLane")} ${competitor.name}`}
                 disabled={isPending}
               >
-                <Trash2 className="w-4 h-4" />
+                <ArrowBigRight className="h-5 w-5" />
               </Button>
-              <EditCompetitorDialog
-                competitor={competitor}
-                updateCompetitor={onUpdate}
-                disabled={isPending}
-              />
             </div>
-            <Button
-              onClick={() => onFill(competitor)}
-              variant="ghost"
-              size="icon"
-              className="text-blue-500 hover:text-blue-700 disabled:opacity-50 disabled:pointer-events-none"
-              aria-label={`${t("SendToLane")} ${competitor.name}`}
-              disabled={isPending}
-            >
-              <ArrowBigRight className="w-5 h-5" />
-            </Button>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -29,37 +29,19 @@ const Header = () => {
   const currentFlag = i18n.language === "uk" ? UkFlag : EnFlag;
   const currentLabel = i18n.language === "uk" ? "Українська" : "English";
 
-  const isColoredHeader = isAdmin || isHost;
-
-  const headerClass = cn(
-    "border-b px-3 sm:px-6 py-3 sm:py-4",
-    isAdmin && "bg-indigo-600 border-indigo-700 text-white",
-    isHost && "bg-teal-600 border-teal-700 text-white",
-    !isColoredHeader && "bg-white border-gray-200 text-gray-900"
-  );
-
-  const titleClass = cn(
-    "text-lg sm:text-2xl font-bold truncate",
-    isColoredHeader ? "text-white" : "text-gray-900"
-  );
-
-  const actionButtonClass = cn(
-    "min-h-11 min-w-11",
-    isColoredHeader &&
-      "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-  );
-
   const RoleIcon = isAdmin ? Shield : Mic;
   const roleLabel = isAdmin ? t("role.admin") : t("role.host");
 
   return (
-    <header className={headerClass}>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-3 sm:px-6 sm:py-4">
         {/* Left: Logo */}
         <div className="flex min-w-0 items-center">
-          <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <img src={Logo} alt="Logo" className="h-7 w-auto sm:h-8 shrink-0" />
-            <h1 className={titleClass}>Trenvet Order</h1>
+          <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <img src={Logo} alt="Logo" className="h-7 w-auto shrink-0 sm:h-8" />
+            <h1 className="font-heading truncate text-lg font-bold text-foreground sm:text-2xl">
+              Trenvet Order
+            </h1>
           </Link>
         </div>
 
@@ -68,18 +50,19 @@ const Header = () => {
           {isLoggedIn && (
             <div
               className={cn(
-                "flex items-center gap-2 rounded-full px-3 py-1",
-                isColoredHeader ? "bg-white/15" : "bg-gray-100"
+                "flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium",
+                isAdmin &&
+                  "bg-primary/15 text-primary ring-1 ring-primary/30",
+                isHost &&
+                  "bg-brand-orange/20 text-brand-orange ring-1 ring-brand-orange/35",
+                !isAdmin &&
+                  !isHost &&
+                  "bg-muted text-muted-foreground"
               )}
               title={roleLabel}
             >
-              <RoleIcon
-                className="h-5 w-5 shrink-0"
-                aria-label={roleLabel}
-              />
-              <span className="hidden sm:inline text-sm font-medium">
-                {roleLabel}
-              </span>
+              <RoleIcon className="h-4 w-4 shrink-0" aria-label={roleLabel} />
+              <span className="hidden sm:inline">{roleLabel}</span>
             </div>
           )}
         </div>
@@ -91,17 +74,17 @@ const Header = () => {
               <Button
                 variant="outline"
                 size="sm"
-                className={cn("flex items-center gap-2", actionButtonClass)}
+                className="flex min-h-11 min-w-11 items-center gap-2"
               >
                 <img
                   src={currentFlag}
                   alt="flag"
-                  className="w-5 h-5 rounded-sm"
+                  className="h-5 w-5 rounded-sm"
                 />
                 <span className="hidden sm:inline">{currentLabel}</span>
                 <ChevronDown
                   className={cn(
-                    "w-4 h-4 transition-transform duration-200",
+                    "h-4 w-4 transition-transform duration-200",
                     open && "rotate-180"
                   )}
                 />
@@ -112,7 +95,7 @@ const Header = () => {
                 <img
                   src={EnFlag}
                   alt="English"
-                  className="w-5 h-5 mr-2 rounded-sm"
+                  className="mr-2 h-5 w-5 rounded-sm"
                 />
                 English
               </DropdownMenuItem>
@@ -120,7 +103,7 @@ const Header = () => {
                 <img
                   src={UkFlag}
                   alt="Українська"
-                  className="w-5 h-5 mr-2 rounded-sm"
+                  className="mr-2 h-5 w-5 rounded-sm"
                 />
                 Українська
               </DropdownMenuItem>
@@ -132,10 +115,10 @@ const Header = () => {
               onClick={logout}
               variant="outline"
               size="sm"
-              className={actionButtonClass}
+              className="min-h-11 min-w-11"
               aria-label={t("logout")}
             >
-              <LogOut className="w-4 h-4 sm:mr-2" />
+              <LogOut className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">{t("logout")}</span>
             </Button>
           )}

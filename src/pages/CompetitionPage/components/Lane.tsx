@@ -35,7 +35,7 @@ function badgeClass(
 
 function laneTypeSelectClass(categoryChangedByAutofill?: boolean) {
   return categoryChangedByAutofill
-    ? "h-8 border-amber-400 bg-amber-50"
+    ? "h-8 border-lane-autofill/40 bg-lane-autofill/10"
     : "h-8";
 }
 
@@ -210,9 +210,9 @@ export default function Lane({
     <Card
       key={lane.id}
       className={[
-        "relative border border-gray-200 flex flex-col rounded-lg overflow-hidden",
+        "relative flex flex-col overflow-hidden rounded-lg border border-border",
         isPending ? "opacity-60 saturate-0" : "",
-        lane.categoryChangedByAutofill ? "ring-2 ring-amber-400" : "",
+        lane.categoryChangedByAutofill ? "ring-2 ring-lane-autofill/50" : "",
       ].join(" ")}
       aria-busy={isPending}
       aria-disabled={isPending}
@@ -304,7 +304,7 @@ export default function Lane({
               <SelectTrigger
                 className={
                   showCategoryChangeAlert
-                    ? "h-8 w-full border-amber-400 bg-amber-50"
+                    ? "h-8 w-full border-lane-autofill/40 bg-lane-autofill/10"
                     : "h-8 w-full"
                 }
                 title={
@@ -340,12 +340,12 @@ export default function Lane({
         )}
 
         {showCategoryChangeAlert ? (
-          <div className="mt-2 text-xl md:text-2xl text-amber-700 font-bold text-center">
+          <div className="mt-2 text-center text-xl font-bold text-lane-autofill md:text-2xl">
             {t("CategoryChange")}
           </div>
         ) : (
           !!allowedCats.length && (
-            <div className="mt-2 text-xs text-gray-500">
+            <div className="mt-2 text-xs text-muted-foreground">
               {t("Allowed")}: {allowedCats.map((cat) => t(cat)).join(", ")}
             </div>
           )
@@ -354,7 +354,7 @@ export default function Lane({
 
       <CardContent className="space-y-3 flex-grow">
         {/* Now */}
-        <div className="bg-green-200 border border-green-400 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-lane-now/40 bg-lane-now/18 p-3 text-center">
           <div className="flex items-center gap-2">
             {isAdmin && lane.competitor && !isPending && !lane.locked && (
               <Button
@@ -369,28 +369,28 @@ export default function Lane({
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             )}
-            <span className="text-sm font-medium text-green-800">
+            <span className="text-sm font-medium text-lane-now">
               {t("Now")}
             </span>
           </div>
           {lane.competitor ? (
             <div className="flex flex-col leading-tight">
-              <div className="text-2xl md:text-3xl lg:text-4xl text-green-900 whitespace-pre-line">
+              <div className="whitespace-pre-line text-2xl font-bold text-lane-now-foreground md:text-3xl lg:text-4xl">
                 {lane.competitor.name}
               </div>
-              <div className="text-xs text-green-700">
+              <div className="text-xs font-medium text-lane-now-foreground/75">
                 {t(lane.competitor.category)}
               </div>
             </div>
           ) : (
-            <div className="text-sm text-green-600 italic">
+            <div className="text-sm italic text-lane-now/70">
               {t("NoCompetitor")}
             </div>
           )}
         </div>
 
         {/* Ready Up */}
-        <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-3 flex flex-col gap-2 items-center text-center">
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-lane-ready/40 bg-lane-ready/18 p-3 text-center">
           <div className="flex items-center gap-2">
             {isAdmin && lane.readyUp && !isPending && !lane.locked && (
               <Button
@@ -405,21 +405,21 @@ export default function Lane({
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             )}
-            <span className="text-sm font-medium text-yellow-800">
+            <span className="text-sm font-medium text-lane-ready">
               {t("ReadyUp")}
             </span>
           </div>
           {lane.readyUp ? (
             <div className="flex flex-col leading-tight">
-              <div className="text-xl md:text-2xl lg:text-3xl text-yellow-900 whitespace-pre-line">
+              <div className="whitespace-pre-line text-xl font-bold text-lane-ready-foreground md:text-2xl lg:text-3xl">
                 {lane.readyUp.name}
               </div>
-              <div className="text-xs text-yellow-700">
+              <div className="text-xs font-medium text-lane-ready-foreground/75">
                 {t(lane.readyUp.category)}
               </div>
             </div>
           ) : (
-            <div className="text-sm text-yellow-600 italic">
+            <div className="text-sm italic text-lane-ready/70">
               {t("NoReadyCompetitor")}
             </div>
           )}
@@ -478,7 +478,7 @@ export default function Lane({
               variant={showCategoryChangeAlert ? "secondary" : "outline"}
               className={
                 showCategoryChangeAlert
-                  ? "h-8 w-8 bg-amber-100 text-amber-800 hover:bg-amber-200"
+                  ? "h-8 w-8 bg-lane-autofill/15 text-lane-autofill hover:bg-lane-autofill/25"
                   : "h-8 w-8"
               }
               onClick={toggleCategoryChangeAlert}

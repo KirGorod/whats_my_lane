@@ -1493,11 +1493,11 @@ export default function CompetitionPage() {
     returnCompetitorToWaiting(laneId, "readyUp");
 
   if (!exerciseId) {
-    return <p className="p-6 text-gray-500">Invalid competition</p>;
+    return <p className="p-6 text-muted-foreground">Invalid competition</p>;
   }
 
   if (!metaLoaded) {
-    return <p className="p-6 text-gray-500">Loading competition...</p>;
+    return <p className="p-6 text-muted-foreground">Loading competition...</p>;
   }
 
   if (competitionKind === "team") {
@@ -1519,7 +1519,7 @@ export default function CompetitionPage() {
   const activeLanesCount = lanes.filter((l) => !!l.competitor).length;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-muted/30 p-4 sm:p-6">
       <HostNotificationModal exerciseId={exerciseId} />
       {/* Header with name and status */}
       <CompetitionHeader
@@ -1531,7 +1531,7 @@ export default function CompetitionPage() {
 
       {/* Desktop */}
       <div className="hidden xl:flex">
-        <div className="w-1/5 border-r border-gray-200 bg-white">
+        <div className="w-1/5 border-r border-border bg-card">
           <CompetitorsList
             exerciseId={exerciseId}
             competitors={competitors}
@@ -1550,7 +1550,7 @@ export default function CompetitionPage() {
           />
         </div>
 
-        <div className="w-3/5 border-r border-gray-200 bg-white">
+        <div className="w-3/5 border-r border-border bg-card">
           <Lanes
             exerciseId={exerciseId}
             lanes={lanes}
@@ -1562,7 +1562,7 @@ export default function CompetitionPage() {
           />
         </div>
 
-        <div className="w-1/5 bg-white">
+        <div className="w-1/5 bg-card">
           <DoneCompetitorsList
             doneCompetitors={doneCompetitors}
             returnDoneCompetitorToLane={returnDoneCompetitorToLane}
@@ -1572,14 +1572,14 @@ export default function CompetitionPage() {
       </div>
 
       {/* Mobile/Tablet */}
-      <div className="xl:hidden h-[calc(100vh-80px)] bg-white">
+      <div className="h-[calc(100vh-80px)] bg-card xl:hidden">
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className="h-full flex flex-col"
+          className="flex h-full flex-col"
         >
-          <div className="border-b border-gray-200 px-4">
-            <TabsList className="grid w-full grid-cols-3 bg-gray-50">
+          <div className="border-b border-border px-4 py-2">
+            <TabsList className="grid h-auto w-full grid-cols-3">
               <TabsTrigger
                 value="competitors"
                 className="flex items-center gap-1 sm:gap-2"

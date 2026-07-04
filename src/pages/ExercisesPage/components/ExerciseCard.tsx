@@ -20,13 +20,17 @@ import {
 import { statusOptions } from "../../../types/exercise";
 import type { Exercise } from "../../../types/exercise";
 import { Link } from "react-router-dom";
-import { statusBadgeClass } from "../../../utils/statusStyles";
+import {
+  statusAccentClass,
+  statusBadgeClass,
+} from "../../../utils/statusStyles";
 
 import { useEffect, useState } from "react";
 import { db } from "../../../firebase";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useAuth } from "../../../context/AuthContext";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 
 function useCompetitorCounts(exerciseId: string, enabled: boolean) {
   const [total, setTotal] = useState(0);
@@ -78,23 +82,18 @@ function useTeamCounts(exerciseId: string, enabled: boolean) {
   return { total, waiting };
 }
 
-// Robust formatter for "HH:mm" | null | ISO | Date | Firestore Timestamp
 type TimestampLike = { toDate: () => Date };
 
 function formatTimeAny(value: unknown, t: (k: string) => string): string {
   if (!value) return t("NotSet") || "—";
 
-  // String cases
   if (typeof value === "string") {
-    // Already "HH:mm"
     const hhmm = value.match(/^(\d{2}):(\d{2})$/);
     if (hhmm) return value;
 
-    // ISO-like with "T"
     const iso = value.match(/T(\d{2}):(\d{2})/);
     if (iso) return `${iso[1]}:${iso[2]}`;
 
-    // Try Date parse fallback
     const d = new Date(value);
     if (!isNaN(d.getTime())) {
       return d.toLocaleTimeString("uk-UA", {
@@ -106,7 +105,6 @@ function formatTimeAny(value: unknown, t: (k: string) => string): string {
     return t("NotSet") || "—";
   }
 
-  // Firestore Timestamp
   const maybeTimestamp = value as Partial<TimestampLike>;
   if (typeof maybeTimestamp.toDate === "function") {
     const d = maybeTimestamp.toDate();
@@ -117,8 +115,7 @@ function formatTimeAny(value: unknown, t: (k: string) => string): string {
     });
   }
 
-  // Date or other coercible types
-  const d = new Date(value);
+  const d = new Date(value as string | number | Date);
   if (!isNaN(d.getTime())) {
     return d.toLocaleTimeString("uk-UA", {
       hour: "2-digit",
@@ -150,11 +147,11 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
   const { t } = useTranslation();
 
   const Title = (
-    <CardTitle className="text-base sm:text-lg flex items-center gap-2 truncate group-hover:underline">
+    <CardTitle className="flex items-center gap-2 truncate text-base group-hover:underline sm:text-lg">
       {competitionKind === "team" ? (
-        <UsersRound className="w-5 h-5 shrink-0" />
+        <UsersRound className="h-5 w-5 shrink-0 text-primary" />
       ) : (
-        <Dumbbell className="w-5 h-5 shrink-0" />
+        <Dumbbell className="h-5 w-5 shrink-0 text-primary" />
       )}
       <span className="truncate">{exercise.name}</span>
     </CardTitle>
@@ -162,25 +159,25 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
 
   const Inner = (
     <Card
-      className={`w-full transition-shadow transition-colors duration-150
-    ${
-      isAdmin
-        ? "hover:shadow-sm hover:bg-accent/40"
-        : "hover:shadow-md hover:bg-accent cursor-pointer group"
-    }`}
+      className={cn(
+        "w-full border-l-4 transition-all duration-200",
+        statusAccentClass(exercise.status),
+        isAdmin
+          ? "hover:bg-accent/30 hover:shadow-md"
+          : "cursor-pointer group hover:bg-accent/40 hover:shadow-md"
+      )}
     >
-      <CardHeader className="p-4 pb-2">
+      <CardHeader className="gap-0 p-4 pb-2">
         <div className="flex items-start justify-between gap-3">
-          {/* Title: link only for admin; for non-admin, whole card is link */}
           {isAdmin ? (
             <Link
               to={`/competitions/${exercise.id}`}
-              className="flex-1 min-w-0 group"
+              className="group min-w-0 flex-1"
             >
               {Title}
             </Link>
           ) : (
-            <div className="flex-1 min-w-0">{Title}</div>
+            <div className="min-w-0 flex-1">{Title}</div>
           )}
 
           {isAdmin && (
@@ -190,13 +187,13 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
                 size="sm"
                 onClick={() => handleEdit(exercise)}
               >
-                <Edit className="w-4 h-4" />
+                <Edit className="h-4 w-4" />
               </Button>
 
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="ghost" size="sm">
-                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -210,7 +207,7 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={() => handleDelete(exercise)}
-                      className="bg-red-600 hover:bg-red-700"
+                      className="bg-destructive hover:bg-destructive/90"
                     >
                       Delete
                     </AlertDialogAction>
@@ -221,21 +218,22 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
           )}
         </div>
 
-        <div className="flex gap-2 flex-wrap mt-2">
+        <div className="mt-2 flex flex-wrap gap-2">
           <span
-            className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadgeClass(
-              exercise.status
-            )}`}
+            className={cn(
+              "rounded-full px-2 py-1 text-xs font-medium",
+              statusBadgeClass(exercise.status)
+            )}
           >
             {t(
               statusOptions.find((s) => s.value === exercise.status)?.label ??
                 ""
             )}
           </span>
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+          <span className="rounded-full border border-primary/35 bg-primary/18 px-2 py-1 text-xs font-medium text-primary">
             {exercise.numberOfLanes} {t("LanesCount")}
           </span>
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+          <span className="rounded-full border border-brand-olive/35 bg-brand-olive/18 px-2 py-1 text-xs font-medium text-brand-olive">
             {competitionKind === "team" ? "Команди" : "Veteran"}
           </span>
         </div>
@@ -244,10 +242,8 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
       <CardContent className="p-4 pt-0">
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between">
-            <span className="font-medium text-gray-700">
-              {t("timeToStart")}
-            </span>
-            <span className="text-gray-600">
+            <span className="font-medium text-foreground">{t("timeToStart")}</span>
+            <span className="text-muted-foreground">
               {formatTimeAny(exercise.timeToStart, t)}
             </span>
           </div>
@@ -255,8 +251,8 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
           <div className="flex items-center justify-between">
             {competitionKind === "team" ? (
               <>
-                <span className="font-medium text-gray-700">Команди</span>
-                <span className="text-gray-600">
+                <span className="font-medium text-foreground">Команди</span>
+                <span className="text-muted-foreground">
                   {totalTeams} команд
                   {typeof waitingTeams === "number"
                     ? ` (${waitingTeams} ${t("Waiting")})`
@@ -265,10 +261,10 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
               </>
             ) : (
               <>
-                <span className="font-medium text-gray-700">
+                <span className="font-medium text-foreground">
                   {t("competitors")}
                 </span>
-                <span className="text-gray-600">
+                <span className="text-muted-foreground">
                   {total}{" "}
                   {total === 1 ? t("competitor") : t("competitorsCount")}
                   {typeof waiting === "number"
@@ -283,7 +279,6 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
     </Card>
   );
 
-  // For non-admins, wrap the whole card with Link (no nested links inside)
   if (!isAdmin) {
     return (
       <Link to={`/competitions/${exercise.id}`} className="block">
@@ -292,7 +287,6 @@ const ExerciseCard = ({ exercise, handleEdit, handleDelete }: Props) => {
     );
   }
 
-  // Admin sees original behavior
   return Inner;
 };
 

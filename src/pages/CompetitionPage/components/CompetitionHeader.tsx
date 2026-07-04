@@ -11,15 +11,16 @@ import { useAuth } from "../../../context/AuthContext";
 import { statusBadgeClass } from "../../../utils/statusStyles";
 import { useTranslation } from "react-i18next";
 import SendHostNotificationDialog from "./SendHostNotificationDialog";
+import { cn } from "@/lib/utils";
 
 function statusIcon(s: ExerciseStatus) {
   switch (s) {
     case "planned":
-      return <CalendarClock className="w-4 h-4" />;
+      return <CalendarClock className="h-4 w-4" />;
     case "ongoing":
-      return <PlayCircle className="w-4 h-4" />;
+      return <PlayCircle className="h-4 w-4" />;
     case "finished":
-      return <CheckCircle2 className="w-4 h-4" />;
+      return <CheckCircle2 className="h-4 w-4" />;
     default:
       return null;
   }
@@ -54,22 +55,21 @@ export default memo(function CompetitionHeader({
   };
 
   return (
-    <div className="mb-4 flex gap-3 flex-col">
+    <div className="mb-4 flex flex-col gap-3">
       <div className="flex items-center justify-center gap-3">
-        <div className="min-w-0 flex gap-3 items-center">
-          <h1 className="text-xl sm:text-2xl font-semibold truncate">
+        <div className="flex min-w-0 items-center gap-3">
+          <h1 className="font-heading truncate text-xl font-semibold sm:text-2xl">
             {name ?? t("Competition")}
           </h1>
 
-          <Badge className={`capitalize ${statusBadgeClass(status)}`}>
+          <Badge className={cn("capitalize", statusBadgeClass(status))}>
             {statusIcon(status)} <span className="ml-1">{t(status)}</span>
           </Badge>
         </div>
       </div>
 
-      {/* Status selector */}
       {isAdmin && (
-        <div className="flex flex-wrap gap-2 justify-center items-center">
+        <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-border/80 bg-card p-2 shadow-sm">
           {statusOptions.map(({ value, label }) => (
             <Button
               key={value}

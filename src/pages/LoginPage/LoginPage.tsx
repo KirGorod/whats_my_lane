@@ -10,6 +10,7 @@ import {
 } from "../../components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import Logo from "../../assets/trenvet.svg";
 
 export default function LoginPage() {
   const { login, isLoggedIn } = useAuth();
@@ -39,10 +40,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
-      <Card className="w-full max-w-[350px]">
-        <CardHeader>
-          <CardTitle>{t("login.title")}</CardTitle>
+    <div className="login-gradient-bg flex min-h-screen items-center justify-center px-4">
+      <Card className="w-full max-w-[380px] shadow-md">
+        <CardHeader className="items-center space-y-4 pb-2 text-center">
+          <img src={Logo} alt="Trenvet" className="h-12 w-auto" />
+          <CardTitle className="font-heading text-xl">
+            {t("login.title")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -57,8 +61,8 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button type="submit" className="w-full min-h-11">
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="min-h-11 w-full">
               {t("login.submit")}
             </Button>
           </form>

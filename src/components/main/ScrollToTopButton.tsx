@@ -25,9 +25,9 @@ export default function ScrollToTopButton() {
       {visible && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 p-3 rounded-full bg-gray-800 text-white shadow-lg hover:bg-gray-700 transition"
+          className="fixed bottom-6 right-6 rounded-full bg-primary p-3 text-primary-foreground shadow-lg transition hover:bg-primary/90"
         >
-          <ArrowUp className="w-5 h-5" />
+          <ArrowUp className="h-5 w-5" />
         </button>
       )}
     </>

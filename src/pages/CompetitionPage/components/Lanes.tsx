@@ -225,12 +225,12 @@ export default function Lanes({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg shadow">
+    <div className="flex h-full flex-col rounded-lg bg-card shadow-sm">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="hidden lg:flex items-center gap-2 mb-4">
-          <Flag className="w-5 h-5 text-gray-600" />
-          <h2 className="text-lg font-semibold">
+      <div className="border-b border-border p-4">
+        <div className="mb-4 hidden items-center gap-2 lg:flex">
+          <Flag className="h-5 w-5 text-primary" />
+          <h2 className="font-heading text-lg font-semibold">
             {t("Lanes")} ({occupiedLanes}/{lanes.length})
           </h2>
         </div>
@@ -238,8 +238,8 @@ export default function Lanes({
         {isAdmin && (
           <>
             <div className="mb-1.5">
-              <div className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50 p-0.5">
-                <span className="text-[11px] leading-none text-gray-500 px-1.5">
+              <div className="inline-flex items-center rounded-lg border border-border bg-muted/50 p-0.5">
+                <span className="px-1.5 text-[11px] leading-none text-muted-foreground">
                   {t("AutofillModeLabel")}
                 </span>
                 <Button
@@ -250,7 +250,7 @@ export default function Lanes({
                 >
                   {t("AutofillModeStrict")}
                 </Button>
-                <span className="text-[10px] leading-none text-gray-300 px-0.5">
+                <span className="px-0.5 text-[10px] leading-none text-border">
                   /
                 </span>
                 <Button
