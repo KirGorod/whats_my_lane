@@ -356,12 +356,12 @@ export default function LoadAthletesDialog({
           {triggerIcon ?? defaultTriggerIcon}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Завантажити атлетів</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
           <div className="space-y-3">
             <div className="space-y-1">
               <p className="text-sm font-medium">Ліга</p>
@@ -489,7 +489,7 @@ export default function LoadAthletesDialog({
                 Оберіть лігу та вправу, щоб побачити під-турніри.
               </p>
             ) : (
-              <div className="h-64 rounded border overflow-y-auto divide-y">
+              <div className="max-h-48 rounded border overflow-y-auto divide-y">
                 {competitions.map((c) => {
                   const checked = selectedCompetitionIds.has(c.id);
                   const cat =
@@ -590,7 +590,7 @@ export default function LoadAthletesDialog({
                 додаванням.
               </p>
             ) : (
-              <div className="h-48 rounded border overflow-y-auto divide-y">
+              <div className="max-h-40 rounded border overflow-y-auto divide-y">
                 {preview.map((p) => (
                   <div
                     key={p.id}
@@ -626,7 +626,7 @@ export default function LoadAthletesDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t pt-4">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Скасувати
           </Button>
