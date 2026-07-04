@@ -220,11 +220,20 @@ function runExitPass(
   return assignments;
 }
 
-/** Simulate all lanes finishing an exit: clear NOW, apply pending lane type. */
+/** Whether any unlocked lane still blocks the next NOW assignment pass. */
+function hasOccupiedLanes(virtualLanes: VirtualLane[]): boolean {
+  return virtualLanes.some(
+    (l) => !l.locked && (l.competitor !== null || l.readyUp !== null)
+  );
+}
+
+/** Simulate all lanes finishing an exit: NOW -> done, READY UP -> NOW, apply pending lane type. */
 function simulateExitComplete(virtualLanes: VirtualLane[]) {
   for (const lane of virtualLanes) {
     if (lane.locked) continue;
-    lane.competitor = null;
+
+    lane.competitor = lane.readyUp ? { id: lane.readyUp.id } : null;
+    lane.readyUp = null;
 
     if (lane.nextLaneType && lane.nextLaneType !== lane.laneType) {
       lane.laneType = lane.nextLaneType;
@@ -257,6 +266,24 @@ export function computeAutofillQueueOrder(
     );
 
     if (!assignments.length) {
+      if (hasOccupiedLanes(virtualLanes)) {
+        simulateExitComplete(virtualLanes);
+        roundNumber++;
+        if (roundNumber > 500) {
+          for (const competitor of remaining) {
+            result.push({
+              competitor,
+              targetLaneType: null,
+              targetLaneId: null,
+              slot: null,
+              roundNumber,
+            });
+          }
+          break;
+        }
+        continue;
+      }
+
       for (const competitor of remaining) {
         result.push({
           competitor,
