@@ -46,16 +46,28 @@ type WaitingByCategory = {
   remaining(): Competitor[];
 };
 
-/** Keep waiting competitors by category; pop in FIFO (orderRank asc). Women are fallback within category. */
+/**
+ * Keep waiting competitors by category; pop in FIFO (orderRank asc).
+ * Within a category: primary → female fallback → low-priority fallback.
+ */
 export function makeWaitingByCategory(waiting: Competitor[]): WaitingByCategory {
   const m = new Map<
     string,
-    { primary: Competitor[]; femaleFallback: Competitor[] }
+    {
+      primary: Competitor[];
+      femaleFallback: Competitor[];
+      lowPriorityFallback: Competitor[];
+    }
   >();
 
   for (const c of waiting) {
-    const bucket = m.get(c.category) ?? { primary: [], femaleFallback: [] };
-    if (c.isFemale) bucket.femaleFallback.push(c);
+    const bucket = m.get(c.category) ?? {
+      primary: [],
+      femaleFallback: [],
+      lowPriorityFallback: [],
+    };
+    if (c.lowPriority) bucket.lowPriorityFallback.push(c);
+    else if (c.isFemale) bucket.femaleFallback.push(c);
     else bucket.primary.push(c);
     m.set(c.category, bucket);
   }
@@ -65,8 +77,15 @@ export function makeWaitingByCategory(waiting: Competitor[]): WaitingByCategory 
       const bucket = m.get(cat);
       if (!bucket) return undefined;
 
-      const c = bucket.primary.shift() ?? bucket.femaleFallback.shift();
-      if (!bucket.primary.length && !bucket.femaleFallback.length) {
+      const c =
+        bucket.primary.shift() ??
+        bucket.femaleFallback.shift() ??
+        bucket.lowPriorityFallback.shift();
+      if (
+        !bucket.primary.length &&
+        !bucket.femaleFallback.length &&
+        !bucket.lowPriorityFallback.length
+      ) {
         m.delete(cat);
       } else {
         m.set(cat, bucket);
@@ -76,7 +95,11 @@ export function makeWaitingByCategory(waiting: Competitor[]): WaitingByCategory 
     remaining(): Competitor[] {
       const all: Competitor[] = [];
       for (const bucket of m.values()) {
-        all.push(...bucket.primary, ...bucket.femaleFallback);
+        all.push(
+          ...bucket.primary,
+          ...bucket.femaleFallback,
+          ...bucket.lowPriorityFallback
+        );
       }
       return all.sort(
         (a, b) => (a.orderRank ?? 0) - (b.orderRank ?? 0)

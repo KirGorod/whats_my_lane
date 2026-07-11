@@ -28,4 +28,6 @@ export interface Competitor {
   order?: number;
   lane?: number | null;
   isFemale?: boolean;
+  /** When true, autofill serves this athlete after others in the same category. */
+  lowPriority?: boolean;
 }

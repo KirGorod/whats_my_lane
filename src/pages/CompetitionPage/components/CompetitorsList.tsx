@@ -3,6 +3,7 @@ import { useAuth } from "../../../context/AuthContext";
 import AddCompetitorDialog from "./AddCompetitorDialog";
 import UploadCompetitorsCSV from "./UploadCompetitorsCSV";
 import LoadAthletesDialog from "./LoadAthletesDialog";
+import { CompetitorListsModal } from "./CompetitorListsModal";
 import { Users, Search, Plus, FileUp, AlertCircle, Download, Trash2, RotateCcw } from "lucide-react";
 import { Input } from "../../../components/ui/input";
 import { Button } from "../../../components/ui/button";
@@ -31,20 +32,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import type { ExerciseType } from "../../../types/exercise";
 import type { LaneModel } from "../../../types/lane";
+import type { Competitor } from "../../../types/competitor";
 import {
   computeAutofillQueueOrder,
   QUEUE_ORDER_AUTOFILL_MODE,
   type QueuedCompetitor,
 } from "../../../utils/autofillOrder";
 import { getRoundGroupClass } from "../../../utils/laneTypeStyles";
-
-type Competitor = {
-  id: string;
-  name: string;
-  category: string;
-  status?: string;
-  orderRank?: number;
-};
 
 const SortableCompetitorRow = ({
   item,
@@ -117,6 +111,7 @@ const CompetitorsList = ({
   removeCompetitor,
   addCompetitor,
   addCompetitorsBulk,
+  undoCompetitorsBulkAdd,
   updateCompetitor,
   removeAllCompetitors,
   undoRemoveAllCompetitors,
@@ -130,8 +125,10 @@ const CompetitorsList = ({
   removeCompetitor: (c: Competitor) => Promise<void> | void;
   addCompetitor: (c: Omit<Competitor, "id">) => Promise<void> | void;
   addCompetitorsBulk?: (
-    c: Array<Omit<Competitor, "id">>
-  ) => Promise<void> | void;
+    c: Array<Omit<Competitor, "id">>,
+    options?: { silent?: boolean }
+  ) => Promise<string[]> | string[];
+  undoCompetitorsBulkAdd?: (ids: string[]) => Promise<void> | void;
   updateCompetitor: (
     c: Competitor,
     patch: Pick<Competitor, "name" | "category">
@@ -306,6 +303,10 @@ const CompetitorsList = ({
               exerciseId={exerciseId}
               triggerButtonClass="p-2 rounded-full hover:bg-gray-100"
               triggerIcon={<FileUp className="w-5 h-5 text-green-600" />}
+            />
+            <CompetitorListsModal
+              addCompetitorsBulk={addCompetitorsBulk}
+              undoCompetitorsBulkAdd={undoCompetitorsBulkAdd}
             />
             <Button
               variant="ghost"

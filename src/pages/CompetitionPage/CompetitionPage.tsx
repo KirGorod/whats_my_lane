@@ -249,15 +249,18 @@ export default function CompetitionPage() {
   };
 
   const addCompetitorsBulk = async (
-    list: Array<Omit<Competitor, "id">>
-  ): Promise<void> => {
-    if (!exerciseId) return;
-    if (!list.length) return;
+    list: Array<Omit<Competitor, "id">>,
+    options?: { silent?: boolean }
+  ): Promise<string[]> => {
+    if (!exerciseId) return [];
+    if (!list.length) return [];
     try {
       const baseRank = Math.max(...competitors.map((c) => c.orderRank ?? 0), 0);
+      const ids: string[] = [];
       const batch = writeBatch(db);
       list.forEach((competitor, idx) => {
         const ref = doc(collection(db, "exercises", exerciseId, "competitors"));
+        ids.push(ref.id);
         batch.set(ref, {
           ...competitor,
           status: "waiting",
@@ -266,10 +269,31 @@ export default function CompetitionPage() {
         });
       });
       await batch.commit();
-      toast.success(`Додано ${list.length} атлетів`);
+      if (!options?.silent) {
+        toast.success(`Додано ${list.length} атлетів`);
+      }
+      return ids;
     } catch (err) {
       console.error(err);
       toast.error("Error adding athletes");
+      throw err;
+    }
+  };
+
+  const undoCompetitorsBulkAdd = async (ids: string[]): Promise<void> => {
+    if (!exerciseId) return;
+    if (!ids.length) return;
+    try {
+      const batch = writeBatch(db);
+      ids.forEach((id) => {
+        batch.delete(doc(db, "exercises", exerciseId, "competitors", id));
+      });
+      await batch.commit();
+      toast.success(`Скасовано додавання (${ids.length})`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Не вдалося скасувати додавання");
+      throw err;
     }
   };
 
@@ -1543,6 +1567,7 @@ export default function CompetitionPage() {
             removeCompetitor={removeCompetitor}
             addCompetitor={addCompetitor}
             addCompetitorsBulk={addCompetitorsBulk}
+            undoCompetitorsBulkAdd={undoCompetitorsBulkAdd}
             updateCompetitor={updateCompetitor}
             removeAllCompetitors={() => removeAllByStatus("waiting")}
             undoRemoveAllCompetitors={() => undoLastRemoval("waiting")}
@@ -1623,6 +1648,7 @@ export default function CompetitionPage() {
               removeCompetitor={removeCompetitor}
               addCompetitor={addCompetitor}
               addCompetitorsBulk={addCompetitorsBulk}
+              undoCompetitorsBulkAdd={undoCompetitorsBulkAdd}
               updateCompetitor={updateCompetitor}
               removeAllCompetitors={() => removeAllByStatus("waiting")}
               undoRemoveAllCompetitors={() => undoLastRemoval("waiting")}

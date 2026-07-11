@@ -17,7 +17,7 @@ import {
 } from "../../../components/ui/select";
 import { Badge } from "../../../components/ui/badge";
 import { toast } from "sonner";
-import { Download, Loader2, UsersRound, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Loader2, UsersRound, X } from "lucide-react";
 import { COMPETITOR_CATEGORIES } from "../../../types/competitor";
 
 type ApiCompetition = {
@@ -51,8 +51,9 @@ type PreviewAthlete = {
 type LoadAthletesDialogProps = {
   addCompetitor: (c: { name: string; category: string }) => Promise<void> | void;
   addCompetitorsBulk?: (
-    list: Array<{ name: string; category: string }>
-  ) => Promise<void> | void;
+    list: Array<{ name: string; category: string; isFemale?: boolean }>,
+    options?: { silent?: boolean }
+  ) => Promise<string[]> | string[];
   triggerButtonClass?: string;
   triggerIcon?: ReactNode;
 };
@@ -64,6 +65,12 @@ const EXERCISES = [
   { id: "663d51a8580d117febe47865", name: "Веслування на тренажері" },
 ] as const;
 
+const WOMEN_REQUIRED_CATEGORIES = ["n2", "n1", "n0", "r0", "h2", "h1"] as const;
+
+const MEN_REQUIRED_CATEGORIES = COMPETITOR_CATEGORIES.filter(
+  (cat) => !cat.toLowerCase().startsWith("w")
+);
+
 const BASE_URL = "https://apitrenvet.allstrongman.com/api";
 
 const normalizeCategory = (raw?: string | null) =>
@@ -71,6 +78,24 @@ const normalizeCategory = (raw?: string | null) =>
 
 const isFemaleCompetition = (comp?: ApiCompetition) =>
   (comp?.title ?? "").toUpperCase().includes("ЖІНКИ");
+
+const collectPresentCategories = (
+  comps: ApiCompetition[],
+  fallback: string
+) => {
+  const present = new Set<string>();
+  comps.forEach((c) => {
+    const cat =
+      normalizeCategory(c.limitationGroup) || normalizeCategory(fallback);
+    if (cat) present.add(cat);
+  });
+  return present;
+};
+
+const findMissingCategories = (
+  required: readonly string[],
+  present: Set<string>
+) => required.filter((cat) => !present.has(cat.toLowerCase()));
 
 const formatDate = (iso?: string) => {
   if (!iso) return "";
@@ -96,8 +121,8 @@ export default function LoadAthletesDialog({
     Set<string>
   >(new Set());
   const [fallbackCategory, setFallbackCategory] = useState("h1");
-  const [excludeWomen, setExcludeWomen] = useState(true);
   const [missingCategories, setMissingCategories] = useState<string[]>([]);
+  const [subTournamentsOpen, setSubTournamentsOpen] = useState(false);
 
   const [preview, setPreview] = useState<PreviewAthlete[]>([]);
   const [loadingLeagues, setLoadingLeagues] = useState(false);
@@ -124,7 +149,7 @@ export default function LoadAthletesDialog({
   useEffect(() => {
     if (!selectedLeague || !selectedExercise) return;
     void loadCompetitions(selectedLeague, selectedExercise);
-  }, [selectedLeague, selectedExercise, excludeWomen]);
+  }, [selectedLeague, selectedExercise]);
 
   const loadLeagues = async () => {
     setLoadingLeagues(true);
@@ -165,34 +190,33 @@ export default function LoadAthletesDialog({
         if (!comps.length || comps.length < 10) break;
       }
       console.log("competitions count:", all.length);
-      const comps = all.filter(
-        (c) => !excludeWomen || !isFemaleCompetition(c)
-      );
       // filter to matching exercise if present; otherwise show all
-      const matches = comps.filter((c) =>
+      const matches = all.filter((c) =>
         (c.exercises ?? []).some((ex) => ex.identifier === exerciseId)
       );
-      const visible = (matches.length ? matches : comps).sort(
+      const visible = (matches.length ? matches : all).sort(
         (a, b) => Number(isFemaleCompetition(a)) - Number(isFemaleCompetition(b))
       );
-      const preselected = matches.length ? matches : comps;
-      const requiredCategories = COMPETITOR_CATEGORIES.filter(
-        (cat) => !cat.toLowerCase().startsWith("w")
-      );
-      const presentCategories = new Set<string>();
-      visible.forEach((c) => {
-        const cat =
-          normalizeCategory(c.limitationGroup) ||
-          normalizeCategory(fallbackCategory);
-        if (cat && !cat.startsWith("w")) presentCategories.add(cat);
-      });
-      const missing = requiredCategories.filter(
-        (cat) => !presentCategories.has(cat.toLowerCase())
-      );
+      const preselected = matches.length ? matches : all;
+      const maleComps = visible.filter((c) => !isFemaleCompetition(c));
+      const femaleComps = visible.filter((c) => isFemaleCompetition(c));
+      const missing: string[] = [];
+      if (maleComps.length) {
+        const present = collectPresentCategories(maleComps, fallbackCategory);
+        missing.push(
+          ...findMissingCategories(MEN_REQUIRED_CATEGORIES, present)
+        );
+      }
+      if (femaleComps.length) {
+        const present = collectPresentCategories(femaleComps, fallbackCategory);
+        missing.push(
+          ...findMissingCategories(WOMEN_REQUIRED_CATEGORIES, present)
+        );
+      }
 
       setCompetitions(visible);
       setSelectedCompetitionIds(new Set(preselected.map((c) => c.id)));
-      setMissingCategories(missing);
+      setMissingCategories([...new Set(missing)]);
     } catch (err) {
       console.error(err);
       toast.error("Не вдалося завантажити під-турніри");
@@ -341,6 +365,7 @@ export default function LoadAthletesDialog({
       setPreview([]);
       setSelectedCompetitionIds(new Set());
       setFallbackCategory("h1");
+      setSubTournamentsOpen(false);
     }
   };
 
@@ -409,123 +434,120 @@ export default function LoadAthletesDialog({
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex items-center">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground select-none">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-amber-600"
-                  checked={excludeWomen}
-                  onChange={(e) => setExcludeWomen(e.target.checked)}
-                />
-                <span>Без жінок</span>
-              </label>
-            </div>
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2 text-left"
+              onClick={() => setSubTournamentsOpen((prev) => !prev)}
+            >
+              <span className="flex items-center gap-1.5 text-sm font-medium">
+                {subTournamentsOpen ? (
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0" />
+                )}
                 Під-турніри ({competitions.length})
-              </p>
+              </span>
               <span className="text-xs text-muted-foreground">
                 Обрано: {selectedCompetitionIds.size}/{competitions.length}
               </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!competitions.length}
-                onClick={() =>
-                  setSelectedCompetitionIds(new Set(competitions.map((c) => c.id)))
-                }
-              >
-                Вибрати всі
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!selectedCompetitionIds.size}
-                onClick={() => setSelectedCompetitionIds(new Set())}
-              >
-                Скинути
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!competitions.length}
-                onClick={() =>
-                  setSelectedCompetitionIds(
-                    new Set(
-                      competitions
-                        .filter((c) => !isFemaleCompetition(c))
-                        .map((c) => c.id)
-                    )
-                  )
-                }
-              >
-                Тільки чоловіки
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!competitions.length}
-                onClick={() =>
-                  setSelectedCompetitionIds(
-                    new Set(
-                      competitions
-                        .filter((c) => isFemaleCompetition(c))
-                        .map((c) => c.id)
-                    )
-                  )
-                }
-              >
-                Тільки жінки
-              </Button>
-            </div>
-            {competitions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Оберіть лігу та вправу, щоб побачити під-турніри.
-              </p>
-            ) : (
-              <div className="max-h-48 rounded border overflow-y-auto divide-y">
-                {competitions.map((c) => {
-                  const checked = selectedCompetitionIds.has(c.id);
-                  const cat =
-                    normalizeCategory(c.limitationGroup) ||
-                    normalizeCategory(fallbackCategory);
-                  return (
-                    <label
-                      key={c.id}
-                      className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer"
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">
-                          {c.title ?? "Під-турнір"}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {cat ? `Група: ${cat}` : "Група не вказана"}
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleCompetition(c.id)}
-                        className="h-4 w-4 accent-amber-600"
-                      />
-                    </label>
-                  );
-                })}
-              </div>
+            </button>
+            {subTournamentsOpen && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!competitions.length}
+                    onClick={() =>
+                      setSelectedCompetitionIds(new Set(competitions.map((c) => c.id)))
+                    }
+                  >
+                    Вибрати всі
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedCompetitionIds.size}
+                    onClick={() => setSelectedCompetitionIds(new Set())}
+                  >
+                    Скинути
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!competitions.length}
+                    onClick={() =>
+                      setSelectedCompetitionIds(
+                        new Set(
+                          competitions
+                            .filter((c) => !isFemaleCompetition(c))
+                            .map((c) => c.id)
+                        )
+                      )
+                    }
+                  >
+                    Тільки чоловіки
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!competitions.length}
+                    onClick={() =>
+                      setSelectedCompetitionIds(
+                        new Set(
+                          competitions
+                            .filter((c) => isFemaleCompetition(c))
+                            .map((c) => c.id)
+                        )
+                      )
+                    }
+                  >
+                    Тільки жінки
+                  </Button>
+                </div>
+                {competitions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Оберіть лігу та вправу, щоб побачити під-турніри.
+                  </p>
+                ) : (
+                  <div className="max-h-48 rounded border overflow-y-auto divide-y">
+                    {competitions.map((c) => {
+                      const checked = selectedCompetitionIds.has(c.id);
+                      const cat =
+                        normalizeCategory(c.limitationGroup) ||
+                        normalizeCategory(fallbackCategory);
+                      return (
+                        <label
+                          key={c.id}
+                          className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm">
+                              {c.title ?? "Під-турнір"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {cat ? `Група: ${cat}` : "Група не вказана"}
+                            </span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleCompetition(c.id)}
+                            className="h-4 w-4 accent-amber-600"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          <div className="flex justify-between items-center">
-            <div className="text-xs text-muted-foreground">
-              Категорії з API мають співпасти з локальними:{" "}
-              {COMPETITOR_CATEGORIES.join(", ")}
-            </div>
+          <div className="flex justify-end">
             <Button
               variant="secondary"
               size="sm"
@@ -561,18 +583,18 @@ export default function LoadAthletesDialog({
                 </Button>
               )}
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Категорія за замовчуванням</p>
-                <span className="text-xs text-muted-foreground">
-                  Використаємо, якщо в під-турнірі нема limitationGroup
-                </span>
-              </div>
+            <div className="flex items-center gap-2">
+              <p
+                className="text-sm font-medium shrink-0"
+                title="Використаємо, якщо в під-турнірі нема limitationGroup"
+              >
+                Категорія за замовчуванням
+              </p>
               <Select
                 value={fallbackCategory}
                 onValueChange={(v) => setFallbackCategory(v)}
               >
-                <SelectTrigger className="w-full justify-between">
+                <SelectTrigger className="h-8 w-auto min-w-[5rem] justify-between">
                   <SelectValue placeholder="Не вибрано" className="truncate" />
                 </SelectTrigger>
                 <SelectContent>
@@ -583,6 +605,9 @@ export default function LoadAthletesDialog({
                   ))}
                 </SelectContent>
               </Select>
+              <span className="text-xs text-muted-foreground truncate">
+                якщо нема limitationGroup
+              </span>
             </div>
             {preview.length === 0 ? (
               <p className="text-sm text-muted-foreground">
