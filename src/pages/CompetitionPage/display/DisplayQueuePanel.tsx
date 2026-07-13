@@ -180,7 +180,10 @@ export default function DisplayQueuePanel(props: DisplayQueuePanelProps) {
                         className="ml-auto min-w-0 shrink-0 tabular-nums text-muted-foreground"
                         style={{ fontSize: displayQueueFonts.count }}
                       >
-                        {items.length}
+                        {t("ExitRoundAthleteCount", {
+                          defaultValue: "{{count}} athletes",
+                          count: items.length,
+                        })}
                       </span>
                     </div>
                     <div className="space-y-2">
