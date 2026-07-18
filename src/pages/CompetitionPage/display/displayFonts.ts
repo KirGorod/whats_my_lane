@@ -18,6 +18,8 @@ export const displayQueueFonts = {
   count: "clamp(0.78rem, 0.92rem, 1rem)",
   name: "clamp(0.95rem, 1.1rem, 1.25rem)",
   hint: "clamp(0.78rem, 0.92rem, 1rem)",
+  summaryValue: "clamp(1.35rem, 1.7rem, 1.9rem)",
+  summaryLabel: "clamp(0.7rem, 0.82rem, 0.9rem)",
 } as const;
 
 export const displayPageTitleFont = "clamp(1.35rem, 2rem, 2.5rem)";

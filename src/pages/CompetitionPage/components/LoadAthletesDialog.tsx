@@ -49,9 +49,18 @@ type PreviewAthlete = {
 };
 
 type LoadAthletesDialogProps = {
-  addCompetitor: (c: { name: string; category: string }) => Promise<void> | void;
+  addCompetitor: (c: {
+    name: string;
+    category: string;
+    lowPriority?: boolean;
+  }) => Promise<void> | void;
   addCompetitorsBulk?: (
-    list: Array<{ name: string; category: string; isFemale?: boolean }>,
+    list: Array<{
+      name: string;
+      category: string;
+      isFemale?: boolean;
+      lowPriority?: boolean;
+    }>,
     options?: { silent?: boolean }
   ) => Promise<string[]> | string[];
   triggerButtonClass?: string;
@@ -121,6 +130,7 @@ export default function LoadAthletesDialog({
     Set<string>
   >(new Set());
   const [fallbackCategory, setFallbackCategory] = useState("h1");
+  const [lowPriority, setLowPriority] = useState(false);
   const [missingCategories, setMissingCategories] = useState<string[]>([]);
   const [subTournamentsOpen, setSubTournamentsOpen] = useState(false);
 
@@ -340,6 +350,7 @@ export default function LoadAthletesDialog({
         name: p.name,
         category: p.category,
         isFemale: p.isFemale ?? false,
+        ...(lowPriority ? { lowPriority: true } : {}),
       }));
       if (addCompetitorsBulk) {
         await addCompetitorsBulk(payload);
@@ -365,6 +376,7 @@ export default function LoadAthletesDialog({
       setPreview([]);
       setSelectedCompetitionIds(new Set());
       setFallbackCategory("h1");
+      setLowPriority(false);
       setSubTournamentsOpen(false);
     }
   };
@@ -609,6 +621,15 @@ export default function LoadAthletesDialog({
                 якщо нема limitationGroup
               </span>
             </div>
+            <label className="flex items-center gap-2 text-sm select-none">
+              <input
+                type="checkbox"
+                checked={lowPriority}
+                onChange={(e) => setLowPriority(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Найнижчий пріоритет при завантаженні
+            </label>
             {preview.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Після завантаження атлети з'являться тут. Їх можна прибрати перед

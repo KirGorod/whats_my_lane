@@ -118,6 +118,48 @@ export default function DisplayQueuePanel(props: DisplayQueuePanelProps) {
             {title} ({count})
           </h2>
         </div>
+        {props.mode === "veteran" && count > 0 ? (
+          <div className="mt-2 space-y-1.5">
+            <p
+              className="text-center font-semibold text-foreground"
+              style={{ fontSize: displayQueueFonts.summaryValue }}
+            >
+              {t("QueueRemainingLabel", { defaultValue: "Remaining" })}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-md border border-primary/25 bg-primary/10 px-2.5 py-2 text-center">
+                <div
+                  className="font-bold tabular-nums leading-none text-primary"
+                  style={{ fontSize: displayQueueFonts.summaryValue }}
+                >
+                  {veteranGroups.length}
+                </div>
+                <div
+                  className="mt-1 font-semibold uppercase tracking-wide text-primary/80"
+                  style={{ fontSize: displayQueueFonts.summaryLabel }}
+                >
+                  {t("QueueRemainingRounds", { defaultValue: "rounds left" })}
+                </div>
+              </div>
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-center">
+                <div
+                  className="font-bold tabular-nums leading-none text-amber-700 dark:text-amber-400"
+                  style={{ fontSize: displayQueueFonts.summaryValue }}
+                >
+                  {count}
+                </div>
+                <div
+                  className="mt-1 font-semibold uppercase tracking-wide text-amber-700/80 dark:text-amber-400/80"
+                  style={{ fontSize: displayQueueFonts.summaryLabel }}
+                >
+                  {t("QueueRemainingAthletes", {
+                    defaultValue: "athletes left",
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
