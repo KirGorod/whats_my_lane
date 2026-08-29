@@ -118,5 +118,20 @@
   "hostNotification.sendSuccess": "Повідомлення надіслано ведучому",
   "hostNotification.sendError": "Не вдалося надіслати повідомлення",
   "hostNotification.close": "OK",
-  "hostNotification.defaultTitle": "Повідомлення"
+  "hostNotification.defaultTitle": "Повідомлення",
+  "DuplicatesTitle": "Знайдено можливі дублікати",
+  "DuplicatesDescription": "Схоже, деякі атлети вже є у списку. Оберіть, що зробити з кожним, перш ніж додати.",
+  "DuplicatesSkipAll": "Пропустити всіх",
+  "DuplicatesAddAll": "Додати всіх",
+  "DuplicatesExistingEntry": "Вже у списку:",
+  "DuplicatesSimilarEntry": "Схоже на ({{percent}}%):",
+  "DuplicatesInThisBatch": "Дублікат у цьому завантаженні:",
+  "DuplicatesSkip": "Пропустити",
+  "DuplicatesAdd": "Все одно додати",
+  "DuplicatesReplace": "Замінити",
+  "DuplicatesSummary": "Додати: {{added}} · Пропустити: {{skipped}} · Замінити: {{replaced}}",
+  "DuplicatesConfirm": "Підтвердити",
+  "DuplicatesReplacedCount": "Замінено атлетів: {{count}}",
+  "DuplicatesReplaceAll": "Замінити всіх",
+  "LowPriorityOnLoad": "Найнижчий пріоритет на вихід"
 }

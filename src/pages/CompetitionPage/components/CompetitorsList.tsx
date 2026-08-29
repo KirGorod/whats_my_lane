@@ -301,6 +301,7 @@ const CompetitorsList = ({
             />
             <UploadCompetitorsCSV
               exerciseId={exerciseId}
+              addCompetitorsBulk={addCompetitorsBulk}
               triggerButtonClass="p-2 rounded-full hover:bg-gray-100"
               triggerIcon={<FileUp className="w-5 h-5 text-green-600" />}
             />

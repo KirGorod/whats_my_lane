@@ -11,30 +11,32 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { db } from "@/firebase";
-import {
-  collection,
-  doc,
-  serverTimestamp,
-  writeBatch,
-} from "firebase/firestore";
 import { FileUp } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { COMPETITOR_CATEGORIES } from "../../../types/competitor";
+import type { Competitor } from "../../../types/competitor";
 
 type Row = { name?: string; category?: string };
 
 type UploadCompetitorsCSVProps = {
   exerciseId: string;
+  addCompetitorsBulk?: (
+    list: Array<Omit<Competitor, "id">>,
+    options?: { silent?: boolean }
+  ) => Promise<string[]> | string[];
   triggerButtonClass?: string;
   triggerIcon?: ReactNode;
 };
 
 export default function UploadCompetitorsCSV({
   exerciseId,
+  addCompetitorsBulk,
   triggerButtonClass,
   triggerIcon,
 }: UploadCompetitorsCSVProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [lowPriority, setLowPriority] = useState(true);
   const defaultTriggerIcon = useMemo(
     () => <FileUp className="w-5 h-5" />,
     []
@@ -53,6 +55,10 @@ export default function UploadCompetitorsCSV({
       toast.error("Invalid competition ID");
       return;
     }
+    if (!addCompetitorsBulk) {
+      toast.error("Uploading is not available here");
+      return;
+    }
 
     const validSet = new Set(COMPETITOR_CATEGORIES.map((c) => c.toLowerCase()));
 
@@ -62,19 +68,12 @@ export default function UploadCompetitorsCSV({
       complete: async (results) => {
         const parsedData = (results.data as Row[]) || [];
 
-        const batch = writeBatch(db);
-        const competitorsRef = collection(
-          db,
-          "exercises",
-          exerciseId,
-          "competitors"
-        );
-
         const invalidRows: Array<{
           index: number;
           reason: string;
           value?: string;
         }> = [];
+        const athletes: Array<Omit<Competitor, "id">> = [];
 
         parsedData.forEach((row, index) => {
           const rawName = row.name?.trim();
@@ -99,14 +98,11 @@ export default function UploadCompetitorsCSV({
             return;
           }
 
-          const newDocRef = doc(competitorsRef);
-          batch.set(newDocRef, {
+          athletes.push({
             name: rawName,
             category: normalized,
             lane: null,
-            status: "waiting",
-            orderRank: index,
-            createdAt: serverTimestamp(),
+            ...(lowPriority ? { lowPriority: true } : {}),
           });
         });
 
@@ -119,9 +115,9 @@ export default function UploadCompetitorsCSV({
         }
 
         try {
-          await batch.commit();
+          const ids = await addCompetitorsBulk(athletes, { silent: true });
           toast.success(`CSV Uploaded`, {
-            description: `Successfully added ${parsedData.length} competitors.`,
+            description: `Successfully added ${ids.length} competitors.`,
           });
           setOpen(false);
         } catch (err) {
@@ -160,6 +156,17 @@ export default function UploadCompetitorsCSV({
             Allowed categories (case-insensitive):{" "}
             {COMPETITOR_CATEGORIES.join(", ")}
           </p>
+          <label className="flex items-center gap-2 text-sm select-none">
+            <input
+              type="checkbox"
+              checked={lowPriority}
+              onChange={(e) => setLowPriority(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            {t("LowPriorityOnLoad", {
+              defaultValue: "Найнижчий пріоритет на вихід",
+            })}
+          </label>
           <Input type="file" accept=".csv" onChange={handleFileUpload} />
         </div>
 

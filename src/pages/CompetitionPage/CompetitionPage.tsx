@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Competitor } from "../../types/competitor";
 import type {
@@ -27,7 +27,6 @@ import {
   serverTimestamp,
   writeBatch,
   runTransaction,
-  updateDoc,
 } from "firebase/firestore";
 import {
   Tabs,
@@ -62,6 +61,15 @@ import { useTranslation } from "react-i18next";
 import ScrollToTopButton from "../../components/main/ScrollToTopButton";
 import TeamCompetitionPage from "./TeamCompetitionPage";
 import HostNotificationModal from "./components/HostNotificationModal";
+import ResolveDuplicatesDialog, {
+  type DuplicateResolution,
+} from "./components/ResolveDuplicatesDialog";
+import {
+  findDuplicates,
+  type DuplicateFinding,
+  type ExistingCompetitorRef,
+  type IncomingAthlete,
+} from "../../utils/duplicateDetection";
 
 const normalizeExerciseType = (raw: any): ExerciseType => {
   const v = String(raw ?? "").toLowerCase();
@@ -99,6 +107,45 @@ export default function CompetitionPage() {
   const [doneCompetitors, setDoneCompetitors] = useState<Competitor[]>([]);
   const [lanes, setLanes] = useState<LaneModel[]>([]);
   const orderSaveInFlightRef = useRef(false);
+
+  const [dupPrompt, setDupPrompt] = useState<{
+    findings: DuplicateFinding[];
+    batch: IncomingAthlete[];
+    resolve: (resolutions: DuplicateResolution[] | null) => void;
+  } | null>(null);
+
+  // Every athlete currently in the exercise (waiting, on-lane, ready, done),
+  // used to detect duplicates before new athletes are written.
+  const allCompetitorsForDupCheck = useMemo<ExistingCompetitorRef[]>(() => {
+    const byId = new Map<string, ExistingCompetitorRef>();
+    competitors.forEach((c) =>
+      byId.set(c.id, {
+        id: c.id,
+        name: c.name,
+        category: String(c.category),
+        status: "waiting",
+      })
+    );
+    lanes.forEach((lane) => {
+      if (lane.competitor && !byId.has(lane.competitor.id)) {
+        byId.set(lane.competitor.id, { ...lane.competitor, status: "lane" });
+      }
+      if (lane.readyUp && !byId.has(lane.readyUp.id)) {
+        byId.set(lane.readyUp.id, { ...lane.readyUp, status: "ready" });
+      }
+    });
+    doneCompetitors.forEach((c) => {
+      if (!byId.has(c.id)) {
+        byId.set(c.id, {
+          id: c.id,
+          name: c.name,
+          category: String(c.category),
+          status: "done",
+        });
+      }
+    });
+    return [...byId.values()];
+  }, [competitors, lanes, doneCompetitors]);
 
   // Load exercise meta (name, status, type)
   useEffect(() => {
@@ -235,16 +282,12 @@ export default function CompetitionPage() {
   const addCompetitor = async (competitor: Omit<Competitor, "id">) => {
     if (!exerciseId) return;
     try {
-      const maxRank = Math.max(...competitors.map((c) => c.orderRank ?? 0), 0);
-      await addDoc(collection(db, "exercises", exerciseId, "competitors"), {
-        ...competitor,
-        status: "waiting",
-        orderRank: maxRank + 1,
-        createdAt: serverTimestamp(),
+      const ids = await addCompetitorsBulkChecked([competitor], {
+        silent: true,
       });
-      toast.success("Competitor added");
+      if (ids.length) toast.success("Competitor added");
     } catch {
-      toast.error("Error adding competitor");
+      /* toasts handled in addCompetitorsBulk */
     }
   };
 
@@ -280,6 +323,70 @@ export default function CompetitionPage() {
     }
   };
 
+  // Runs duplicate detection against the whole exercise roster; when conflicts
+  // exist, waits for the user's per-athlete decisions before writing anything.
+  const addCompetitorsBulkChecked = async (
+    list: Array<Omit<Competitor, "id">>,
+    options?: { silent?: boolean }
+  ): Promise<string[]> => {
+    if (!exerciseId || !list.length) return [];
+
+    const findings = findDuplicates(list, allCompetitorsForDupCheck);
+    if (!findings.length) return addCompetitorsBulk(list, options);
+
+    const resolutions = await new Promise<DuplicateResolution[] | null>(
+      (resolve) => setDupPrompt({ findings, batch: list, resolve })
+    );
+    setDupPrompt(null);
+    if (!resolutions) return [];
+
+    const decisions = new Map(resolutions.map((r) => [r.incomingIndex, r]));
+    const toAdd: Array<Omit<Competitor, "id">> = [];
+    const replacements: Array<{
+      target: ExistingCompetitorRef;
+      incoming: Omit<Competitor, "id">;
+    }> = [];
+
+    list.forEach((athlete, idx) => {
+      const decision = decisions.get(idx);
+      if (!decision || decision.action === "add") {
+        toAdd.push(athlete);
+        return;
+      }
+      if (decision.action === "replace" && decision.replaceTargetId) {
+        const target = allCompetitorsForDupCheck.find(
+          (c) => c.id === decision.replaceTargetId
+        );
+        if (target) replacements.push({ target, incoming: athlete });
+      }
+      // "skip" (and replace without a target) → dropped
+    });
+
+    for (const { target, incoming } of replacements) {
+      await updateCompetitor(
+        target as Competitor,
+        {
+          name: incoming.name,
+          category: incoming.category,
+          ...(incoming.isFemale !== undefined
+            ? { isFemale: incoming.isFemale }
+            : {}),
+        },
+        { silent: true }
+      );
+    }
+    if (replacements.length) {
+      toast.success(
+        t("DuplicatesReplacedCount", {
+          defaultValue: "Replaced {{count}} athlete(s)",
+          count: replacements.length,
+        })
+      );
+    }
+
+    return toAdd.length ? addCompetitorsBulk(toAdd, options) : [];
+  };
+
   const undoCompetitorsBulkAdd = async (ids: string[]): Promise<void> => {
     if (!exerciseId) return;
     if (!ids.length) return;
@@ -299,7 +406,9 @@ export default function CompetitionPage() {
 
   const updateCompetitor = async (
     competitor: Competitor,
-    patch: Pick<Competitor, "name" | "category">
+    patch: Pick<Competitor, "name" | "category"> &
+      Partial<Pick<Competitor, "isFemale">>,
+    options?: { silent?: boolean }
   ) => {
     if (!exerciseId) return;
     const name = patch.name.trim();
@@ -308,11 +417,46 @@ export default function CompetitionPage() {
       return;
     }
     try {
-      await updateDoc(
+      const batch = writeBatch(db);
+      const docPatch: Record<string, string | boolean> = {
+        name,
+        category: patch.category,
+      };
+      if (patch.isFemale !== undefined) docPatch.isFemale = patch.isFemale;
+      batch.update(
         doc(db, "exercises", exerciseId, "competitors", competitor.id),
-        { name, category: patch.category }
+        docPatch
       );
-      toast.success("Учасника оновлено");
+      // Keep denormalized lane snapshots in sync
+      lanes.forEach((lane) => {
+        if (!lane.laneDocId) return;
+        const lanePatch: Record<
+          string,
+          { id: string; name: string; category: string }
+        > = {};
+        if (lane.competitor?.id === competitor.id) {
+          lanePatch.competitor = {
+            ...lane.competitor,
+            name,
+            category: patch.category,
+          };
+        }
+        if (lane.readyUp?.id === competitor.id) {
+          lanePatch.readyUp = {
+            ...lane.readyUp,
+            name,
+            category: patch.category,
+          };
+        }
+        if (Object.keys(lanePatch).length) {
+          batch.update(
+            doc(db, "exercises", exerciseId, "lanes", lane.laneDocId),
+            lanePatch
+          );
+        }
+      });
+      await batch.commit();
+      if (!options?.silent) toast.success("Учасника оновлено");
     } catch {
       toast.error("Не вдалося оновити учасника");
     }
@@ -1545,6 +1689,13 @@ export default function CompetitionPage() {
   return (
     <div className="min-h-screen bg-muted/30 p-4 sm:p-6">
       <HostNotificationModal exerciseId={exerciseId} />
+      <ResolveDuplicatesDialog
+        open={!!dupPrompt}
+        findings={dupPrompt?.findings ?? []}
+        batch={dupPrompt?.batch ?? []}
+        onResolve={(resolutions) => dupPrompt?.resolve(resolutions)}
+        onCancel={() => dupPrompt?.resolve(null)}
+      />
       {/* Header with name and status */}
       <CompetitionHeader
         exerciseId={exerciseId}
@@ -1566,7 +1717,7 @@ export default function CompetitionPage() {
             }}
             removeCompetitor={removeCompetitor}
             addCompetitor={addCompetitor}
-            addCompetitorsBulk={addCompetitorsBulk}
+            addCompetitorsBulk={addCompetitorsBulkChecked}
             undoCompetitorsBulkAdd={undoCompetitorsBulkAdd}
             updateCompetitor={updateCompetitor}
             removeAllCompetitors={() => removeAllByStatus("waiting")}
@@ -1647,7 +1798,7 @@ export default function CompetitionPage() {
               }}
               removeCompetitor={removeCompetitor}
               addCompetitor={addCompetitor}
-              addCompetitorsBulk={addCompetitorsBulk}
+              addCompetitorsBulk={addCompetitorsBulkChecked}
               undoCompetitorsBulkAdd={undoCompetitorsBulkAdd}
               updateCompetitor={updateCompetitor}
               removeAllCompetitors={() => removeAllByStatus("waiting")}

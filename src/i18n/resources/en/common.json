@@ -119,5 +119,20 @@
   "hostNotification.sendSuccess": "Notification sent to host",
   "hostNotification.sendError": "Failed to send notification",
   "hostNotification.close": "OK",
-  "hostNotification.defaultTitle": "Message"
+  "hostNotification.defaultTitle": "Message",
+  "DuplicatesTitle": "Possible duplicates found",
+  "DuplicatesDescription": "Some athletes look like they are already in the list. Choose what to do with each one before adding.",
+  "DuplicatesSkipAll": "Skip all",
+  "DuplicatesAddAll": "Add all",
+  "DuplicatesExistingEntry": "Already in the list:",
+  "DuplicatesSimilarEntry": "Similar to ({{percent}}%):",
+  "DuplicatesInThisBatch": "Duplicate in this load:",
+  "DuplicatesSkip": "Skip",
+  "DuplicatesAdd": "Add anyway",
+  "DuplicatesReplace": "Replace",
+  "DuplicatesSummary": "Add: {{added}} · Skip: {{skipped}} · Replace: {{replaced}}",
+  "DuplicatesConfirm": "Confirm",
+  "DuplicatesReplacedCount": "Replaced {{count}} athlete(s)",
+  "DuplicatesReplaceAll": "Replace all",
+  "LowPriorityOnLoad": "Lowest exit priority"
 }

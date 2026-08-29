@@ -633,6 +633,10 @@ export function CompetitorListsModal({
         { silent: true }
       );
       const addedIds = ids ?? [];
+      if (!addedIds.length) {
+        toast.info("Нічого не додано");
+        return;
+      }
       setLastAdded({ ids: addedIds, listName: list.name });
       toast.success(`Додано ${addedIds.length} атлетів з «${list.name}»`, {
         action: undoCompetitorsBulkAdd
