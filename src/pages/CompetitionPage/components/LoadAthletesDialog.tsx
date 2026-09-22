@@ -164,7 +164,7 @@ export default function LoadAthletesDialog({
   const loadLeagues = async () => {
     setLoadingLeagues(true);
     try {
-      const res = await fetch(`${BASE_URL}/competitions?size=9&page=0`);
+      const res = await fetch(`${BASE_URL}/competitions?size=100&page=0`);
       const data = await res.json();
       const comps = data?.competitions ?? [];
       setLeagues(comps);
@@ -409,7 +409,7 @@ export default function LoadAthletesDialog({
                 <SelectTrigger className="w-full justify-between">
                   <SelectValue placeholder="Оберіть лігу" className="truncate" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-72">
                   {loadingLeagues ? (
                     <SelectItem value="loading">Завантаження...</SelectItem>
                   ) : (
