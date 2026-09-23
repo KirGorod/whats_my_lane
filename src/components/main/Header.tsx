@@ -23,7 +23,6 @@ const Header = () => {
 
   const changeLanguage = (lng: "en" | "uk") => {
     i18n.changeLanguage(lng);
-    document.documentElement.lang = lng;
   };
 
   const currentFlag = i18n.language === "uk" ? UkFlag : EnFlag;
