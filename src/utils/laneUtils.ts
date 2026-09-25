@@ -1,5 +1,16 @@
 import type { Competitor } from "../types/competitor";
-import type { LaneModel, LaneType } from "../types/lane";
+import type { LaneAthlete, LaneModel, LaneType } from "../types/lane";
+
+// Athlete copy written to a lane; `city` is left out when empty because
+// Firestore rejects undefined fields
+export function toLaneAthlete(c: Competitor): LaneAthlete {
+  return {
+    id: c.id,
+    name: c.name,
+    category: c.category,
+    ...(c.city ? { city: c.city } : {}),
+  };
+}
 
 // Group lanes of the same type, preserving visual order (id asc)
 export function groupLanesByType(

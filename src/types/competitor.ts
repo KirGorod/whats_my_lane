@@ -30,4 +30,6 @@ export interface Competitor {
   isFemale?: boolean;
   /** When true, autofill serves this athlete after others in the same category. */
   lowPriority?: boolean;
+  /** Country, taken from the API athlete's `city` field. */
+  city?: string;
 }

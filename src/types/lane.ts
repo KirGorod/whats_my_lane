@@ -28,14 +28,22 @@ export const LANE_TYPES = [
 
 export type LaneType = (typeof LANE_TYPES)[number];
 
+// Denormalized athlete copy stored on a lane doc
+export type LaneAthlete = {
+  id: string;
+  name: string;
+  category: string;
+  city?: string;
+};
+
 export interface LaneModel {
   id: number;
   laneDocId: string;
   laneType: LaneType | null;
   nextLaneType?: LaneType | null;
   category: LaneType | null;
-  competitor: { id: string; name: string; category: string } | null;
-  readyUp: { id: string; name: string; category: string } | null;
+  competitor: LaneAthlete | null;
+  readyUp: LaneAthlete | null;
   locked: boolean;
   categoryChangedByAutofill?: boolean;
   restrictCategoryChange?: boolean;

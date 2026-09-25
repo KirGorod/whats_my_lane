@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
+import { CountryFlag } from "../../../components/ui/country-flag";
 import type { ExerciseType } from "../../../types/exercise";
 import type { LaneModel, LaneType } from "../../../types/lane";
 import { getLaneTypeBadgeClass } from "../../../utils/laneTypeStyles";
@@ -376,6 +377,10 @@ export default function Lane({
           {lane.competitor ? (
             <div className="flex flex-col leading-tight">
               <div className="whitespace-pre-line text-2xl font-bold text-lane-now-foreground md:text-3xl lg:text-4xl">
+                <CountryFlag
+                  country={lane.competitor.city}
+                  className="mr-[0.25em]"
+                />
                 {lane.competitor.name}
               </div>
               <div className="text-xs font-medium text-lane-now-foreground/75">
@@ -412,6 +417,10 @@ export default function Lane({
           {lane.readyUp ? (
             <div className="flex flex-col leading-tight">
               <div className="whitespace-pre-line text-xl font-bold text-lane-ready-foreground md:text-2xl lg:text-3xl">
+                <CountryFlag
+                  country={lane.readyUp.city}
+                  className="mr-[0.25em]"
+                />
                 {lane.readyUp.name}
               </div>
               <div className="text-xs font-medium text-lane-ready-foreground/75">

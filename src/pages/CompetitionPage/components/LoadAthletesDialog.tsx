@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { Badge } from "../../../components/ui/badge";
+import { CountryFlag } from "../../../components/ui/country-flag";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight, Download, Loader2, UsersRound, X } from "lucide-react";
 import { COMPETITOR_CATEGORIES } from "../../../types/competitor";
@@ -38,6 +39,8 @@ type ApiAthlete = {
   name?: string | null;
   lastName?: string | null;
   userId?: string | null;
+  // Holds the athlete's country
+  city?: string | null;
 };
 
 type PreviewAthlete = {
@@ -46,6 +49,7 @@ type PreviewAthlete = {
   category: string;
   competitionTitle: string;
   isFemale?: boolean;
+  city?: string;
 };
 
 type LoadAthletesDialogProps = {
@@ -60,6 +64,7 @@ type LoadAthletesDialogProps = {
       category: string;
       isFemale?: boolean;
       lowPriority?: boolean;
+      city?: string;
     }>,
     options?: { silent?: boolean }
   ) => Promise<string[]> | string[];
@@ -84,6 +89,19 @@ const BASE_URL = "https://apitrenvet.allstrongman.com/api";
 
 const normalizeCategory = (raw?: string | null) =>
   (raw ?? "").trim().toLowerCase();
+
+// API spells countries inconsistently ("Ukraine", "UKRAINE", "USA"):
+// title-case all-caps words, keep short codes like "USA" as-is
+const normalizeCountry = (raw?: string | null) =>
+  (raw ?? "")
+    .trim()
+    .split(/\s+/)
+    .map((word) =>
+      word.length > 3 && word === word.toUpperCase()
+        ? word.charAt(0) + word.slice(1).toLowerCase()
+        : word
+    )
+    .join(" ");
 
 const isFemaleCompetition = (comp?: ApiCompetition) =>
   (comp?.title ?? "").toUpperCase().includes("ЖІНКИ");
@@ -301,12 +319,14 @@ export default function LoadAthletesDialog({
           const key = `${fullName.toLowerCase()}|${category}`;
           if (dedup.has(key)) return;
           dedup.add(key);
+          const city = normalizeCountry(ath.city);
           next.push({
             id: `${compId}-${ath.id ?? idx}`,
             name: fullName,
             category,
             competitionTitle: compTitle,
             isFemale: isFemaleComp,
+            ...(city ? { city } : {}),
           });
         });
       }
@@ -351,6 +371,7 @@ export default function LoadAthletesDialog({
         category: p.category,
         isFemale: p.isFemale ?? false,
         ...(lowPriority ? { lowPriority: true } : {}),
+        ...(p.city ? { city: p.city } : {}),
       }));
       if (addCompetitorsBulk) {
         await addCompetitorsBulk(payload);
@@ -649,6 +670,15 @@ export default function LoadAthletesDialog({
                           {p.category}
                         </Badge>
                         <span>{p.competitionTitle}</span>
+                        {p.city && (
+                          <span className="inline-flex items-center gap-1">
+                            <CountryFlag
+                              country={p.city}
+                              className="h-[1em] w-[1.5em]"
+                            />
+                            ({p.city})
+                          </span>
+                        )}
                       </div>
                     </div>
                     <Button

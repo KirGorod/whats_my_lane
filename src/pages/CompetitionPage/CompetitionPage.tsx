@@ -6,7 +6,7 @@ import type {
   ExerciseType,
   ExerciseStatus,
 } from "../../types/exercise";
-import type { LaneModel, LaneType } from "../../types/lane";
+import type { LaneAthlete, LaneModel, LaneType } from "../../types/lane";
 import { LANE_TYPES } from "../../types/lane";
 import CompetitorsList from "./components/CompetitorsList";
 import Lanes from "./components/Lanes";
@@ -56,7 +56,7 @@ import {
   readyUpLaneType,
   isCategoryAllowedForReady,
 } from "../../utils/autofillOrder";
-import { groupLanesByType } from "../../utils/laneUtils";
+import { groupLanesByType, toLaneAthlete } from "../../utils/laneUtils";
 import { useTranslation } from "react-i18next";
 import ScrollToTopButton from "../../components/main/ScrollToTopButton";
 import TeamCompetitionPage from "./TeamCompetitionPage";
@@ -371,6 +371,7 @@ export default function CompetitionPage() {
           ...(incoming.isFemale !== undefined
             ? { isFemale: incoming.isFemale }
             : {}),
+          ...(incoming.city ? { city: incoming.city } : {}),
         },
         { silent: true }
       );
@@ -407,7 +408,7 @@ export default function CompetitionPage() {
   const updateCompetitor = async (
     competitor: Competitor,
     patch: Pick<Competitor, "name" | "category"> &
-      Partial<Pick<Competitor, "isFemale">>,
+      Partial<Pick<Competitor, "isFemale" | "city">>,
     options?: { silent?: boolean }
   ) => {
     if (!exerciseId) return;
@@ -423,6 +424,8 @@ export default function CompetitionPage() {
         category: patch.category,
       };
       if (patch.isFemale !== undefined) docPatch.isFemale = patch.isFemale;
+      // Only set when provided, so edits without a country keep the stored one
+      if (patch.city) docPatch.city = patch.city;
       batch.update(
         doc(db, "exercises", exerciseId, "competitors", competitor.id),
         docPatch
@@ -430,15 +433,13 @@ export default function CompetitionPage() {
       // Keep denormalized lane snapshots in sync
       lanes.forEach((lane) => {
         if (!lane.laneDocId) return;
-        const lanePatch: Record<
-          string,
-          { id: string; name: string; category: string }
-        > = {};
+        const lanePatch: Record<string, LaneAthlete> = {};
         if (lane.competitor?.id === competitor.id) {
           lanePatch.competitor = {
             ...lane.competitor,
             name,
             category: patch.category,
+            ...(patch.city ? { city: patch.city } : {}),
           };
         }
         if (lane.readyUp?.id === competitor.id) {
@@ -446,6 +447,7 @@ export default function CompetitionPage() {
             ...lane.readyUp,
             name,
             category: patch.category,
+            ...(patch.city ? { city: patch.city } : {}),
           };
         }
         if (Object.keys(lanePatch).length) {
@@ -710,7 +712,7 @@ export default function CompetitionPage() {
             before: lanePatchFields(lane),
             after: {
               ...lanePatchFields(lane),
-              competitor: { id: c.id, name: c.name, category: c.category },
+              competitor: toLaneAthlete(c),
             },
           });
           compPatches.push({
@@ -722,7 +724,7 @@ export default function CompetitionPage() {
           batch.update(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
-              competitor: { id: c.id, name: c.name, category: c.category },
+              competitor: toLaneAthlete(c),
             }
           );
           batch.update(doc(db, "exercises", exerciseId, "competitors", c.id), {
@@ -756,7 +758,7 @@ export default function CompetitionPage() {
             before: lanePatchFields(lane),
             after: {
               ...lanePatchFields(lane),
-              readyUp: { id: c.id, name: c.name, category: c.category },
+              readyUp: toLaneAthlete(c),
             },
           });
           compPatches.push({
@@ -768,7 +770,7 @@ export default function CompetitionPage() {
           batch.update(
             doc(db, "exercises", exerciseId, "lanes", lane.laneDocId!),
             {
-              readyUp: { id: c.id, name: c.name, category: c.category },
+              readyUp: toLaneAthlete(c),
             }
           );
           batch.update(doc(db, "exercises", exerciseId, "competitors", c.id), {
@@ -806,7 +808,7 @@ export default function CompetitionPage() {
         const before = lanePatchFields(lane);
         const after: LanePatchFields = {
           ...before,
-          competitor: { id: c.id, name: c.name, category: c.category },
+          competitor: toLaneAthlete(c),
           laneType: typeChanged ? generalType : before.laneType,
           category: typeChanged ? generalType : before.category,
           nextLaneType: typeChanged ? generalType : before.nextLaneType,
@@ -828,7 +830,7 @@ export default function CompetitionPage() {
         });
 
         const update: Record<string, unknown> = {
-          competitor: { id: c.id, name: c.name, category: c.category },
+          competitor: toLaneAthlete(c),
         };
         if (typeChanged) {
           update.laneType = generalType;
@@ -863,14 +865,14 @@ export default function CompetitionPage() {
         const before = lanePatchFields(lane);
         const after: LanePatchFields = {
           ...before,
-          readyUp: { id: c.id, name: c.name, category: c.category },
+          readyUp: toLaneAthlete(c),
           categoryChangedByAutofill: typeChanged
             ? true
             : before.categoryChangedByAutofill,
         };
 
         const update: Record<string, unknown> = {
-          readyUp: { id: c.id, name: c.name, category: c.category },
+          readyUp: toLaneAthlete(c),
         };
 
         if (typeChanged) {
@@ -1248,20 +1250,12 @@ export default function CompetitionPage() {
         const after =
           mode === "now"
             ? {
-                competitor: {
-                  id: competitor.id,
-                  name: competitor.name,
-                  category: competitor.category,
-                },
+                competitor: toLaneAthlete(competitor),
                 readyUp: data.readyUp ?? null,
               }
             : {
                 competitor: data.competitor ?? null,
-                readyUp: {
-                  id: competitor.id,
-                  name: competitor.name,
-                  category: competitor.category,
-                },
+                readyUp: toLaneAthlete(competitor),
               };
 
         // lane + competitor status
@@ -1426,11 +1420,7 @@ export default function CompetitionPage() {
             readyUp: data.readyUp ?? null,
           };
 
-          const competitorPayload = {
-            id: competitor.id,
-            name: competitor.name,
-            category: competitor.category,
-          };
+          const competitorPayload = toLaneAthlete(competitor);
 
           const after =
             slot === "now"

@@ -1,6 +1,7 @@
 import { Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
+import { CountryFlag } from "@/components/ui/country-flag";
 import type { LaneModel } from "@/types/lane";
 import { getLaneTypeBadgeClass } from "@/utils/laneTypeStyles";
 import { cn } from "@/lib/utils";
@@ -14,11 +15,13 @@ type DisplayLaneCardProps = {
 function ParticipantBlock({
   title,
   name,
+  city,
   category,
   tone,
 }: {
   title: string;
   name?: string | null;
+  city?: string | null;
   category?: string | null;
   tone: "now" | "ready";
 }) {
@@ -57,6 +60,7 @@ function ParticipantBlock({
                   : displayLaneFonts.nameReady,
               }}
             >
+              <CountryFlag country={city} className="mr-[0.25em]" />
               {name}
             </div>
           </div>
@@ -132,12 +136,14 @@ export default function DisplayLaneCard({ lane }: DisplayLaneCardProps) {
         <ParticipantBlock
           title={t("Now")}
           name={lane.competitor?.name}
+          city={lane.competitor?.city}
           category={lane.competitor?.category}
           tone="now"
         />
         <ParticipantBlock
           title={t("ReadyUp")}
           name={lane.readyUp?.name}
+          city={lane.readyUp?.city}
           category={lane.readyUp?.category}
           tone="ready"
         />
